@@ -1,7 +1,7 @@
 # data-nexus 当前系统架构
 
 > 本文件是**当前系统的真实快照**，随代码变更同步更新（开发规范第 8 节）。
-> 最近更新：2026-06-04　|　对应版本：**v0.02**（后端骨架 + 安全核心，已跑通验证）
+> 最近更新：2026-06-04　|　对应版本：**v0.03**（前端骨架 + 登录认证打通，已跑通验证）
 
 ---
 
@@ -11,8 +11,8 @@
 |---|---|
 | 技术方案 | ✅ 已定稿（见 docs/技术方案.md v0.3） |
 | 开发规范 | ✅ 已定稿（见 docs/开发规范.md v1.1） |
-| 后端代码 | 🟡 骨架 + 安全核心已完成（v0.02，已跑通：check/migrate/测试/lint） |
-| 前端代码 | ⬜ 未开始（计划 v0.03） |
+| 后端代码 | 🟡 骨架 + 安全核心 + 认证端点（v0.03，check/migrate/测试/lint 通过） |
+| 前端代码 | 🟡 骨架 + 登录认证打通（v0.03，build/lint 通过，登录链路冒烟验证 200/200/401） |
 
 > 业务 app（datasource/query/execution）尚未实现，规划见第 3 节。
 
@@ -53,7 +53,15 @@ backend/                        ✅ v0.02
     ├── query/                  ⬜ SQL 查询任务、执行、预览
     └── execution/              ⬜ 执行记录、受控下载
 
-frontend/                       ⬜ v0.03（Vue3 + Element Plus）
+frontend/                       🟡 v0.03（Vue3 + TS + Element Plus）
+├── src/
+│   ├── api/http.ts             ✅ axios 实例：注入 Token、401 跳登录、统一错误提示
+│   ├── stores/auth.ts          ✅ Pinia 登录态（Token 持久化）
+│   ├── router/index.ts         ✅ 路由 + 登录守卫（懒加载视图）
+│   ├── layouts/MainLayout.vue  ✅ 侧边菜单 + 顶栏 + 退出
+│   └── views/                  🟡 login(✅) / dashboard(✅连通验证) / datasource·task·execution(占位)
+├── vite.config.ts              ✅ @ 别名 + /api 代理到后端
+└── eslint.config.ts / .prettierrc.json  ✅ ESLint + Prettier
 ```
 
 > APScheduler 定时调度在业务 app 落地后接入（见技术方案 6.2 / 8.1）。
@@ -76,6 +84,8 @@ frontend/                       ⬜ v0.03（Vue3 + Element Plus）
 | 路径 | 方法 | 用途 | 鉴权 | 状态 |
 |---|---|---|---|---|
 | `/api/health/` | GET | 健康检查 | 无 | ✅ |
+| `/api/auth/token/` | POST | 账号密码换 Token | 无 | ✅ |
+| `/api/auth/me/` | GET | 当前登录用户 | Token | ✅ |
 | `/admin/` | - | Django 后台 | 登录 | ✅ |
 
 > 业务接口（数据源/任务/执行/下载）随 app 实现登记。
@@ -91,6 +101,17 @@ copy .env.example .env   # 然后填写 SECRET_KEY / FERNET_KEY
 .\.venv\Scripts\python.exe manage.py runserver
 # 质量检查：python -m ruff check . / python -m black . / python -m pytest
 ```
+
+## 5.2 本地启动（前端）
+
+```powershell
+cd frontend
+npm install
+npm run dev      # http://127.0.0.1:5173 ，/api 自动代理到后端 8000
+# 质量检查：npm run lint / npm run format / npm run build
+```
+
+> 本地测试账号：先在后端 `manage.py createsuperuser` 创建，再到前端登录页登录。
 
 ---
 

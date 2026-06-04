@@ -3,7 +3,7 @@
 > 轻量级企业内部数据共享平台。核心：**把 SQL 跑成 Excel，提供受控下载**。
 > 技术栈：Django + DRF / Vue 3 + Element Plus / APScheduler / SQLite / Oracle。
 
-当前版本：**v0.01**（文档与治理基线，代码未开始）。
+当前版本：**v0.03**（后端安全核心 + 前端骨架 + 登录认证打通）。
 
 ---
 
@@ -21,8 +21,8 @@
 | `changelog/template.md` | 版本变更说明的模板，新建版本复制改名 |
 | `changelog/v0.01.md` | v0.01 版本的变更说明 |
 | `system-docs/architecture.md` | **当前系统真实架构快照**（每次架构/接口变更必更新） |
-| `backend/`（待建） | Django + DRF 后端 |
-| `frontend/`（待建） | Vue 3 + Element Plus 前端 |
+| `backend/` | Django + DRF 后端（骨架 + 安全核心 + 认证，v0.03） |
+| `frontend/` | Vue 3 + TS + Element Plus 前端（骨架 + 登录，v0.03） |
 
 ---
 

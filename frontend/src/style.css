@@ -1,0 +1,13 @@
+/* 全局样式：最小化 reset，让布局占满视口 */
+html,
+body,
+#app {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  font-family: system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  color: #303133;
+}

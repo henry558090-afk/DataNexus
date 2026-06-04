@@ -1,0 +1,37 @@
+# ===== 敏感配置（绝不进仓库）=====
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# ===== Python / Django =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+db.sqlite3
+db.sqlite3-journal
+/backend/media/
+/backend/staticfiles/
+
+# ===== Node / Vue =====
+node_modules/
+/frontend/dist/
+npm-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ===== IDE / OS =====
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ===== 测试 / 覆盖率 =====
+.pytest_cache/
+.coverage
+htmlcov/

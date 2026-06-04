@@ -1,0 +1,13 @@
+# 运行依赖（版本在安装后由 pip freeze 锁定，见 requirements.lock.txt）
+Django>=5.1,<5.2
+djangorestframework>=3.15,<3.16
+django-cors-headers>=4.4
+django-environ>=0.11
+oracledb>=2.5         # python-oracledb 驱动，PyPI 包名为 oracledb（thin 模式免装客户端）
+openpyxl>=3.1
+cryptography>=42
+
+# 开发 / 质量工具
+ruff>=0.6
+black>=24.0
+pytest>=8.0

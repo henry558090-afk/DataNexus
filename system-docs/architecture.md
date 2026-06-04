@@ -1,7 +1,7 @@
 # data-nexus 当前系统架构
 
 > 本文件是**当前系统的真实快照**，随代码变更同步更新（开发规范第 8 节）。
-> 最近更新：2026-06-04　|　对应版本：**v0.01**（文档与治理基线，代码未开始）
+> 最近更新：2026-06-04　|　对应版本：**v0.02**（后端骨架 + 安全核心，已跑通验证）
 
 ---
 
@@ -11,10 +11,10 @@
 |---|---|
 | 技术方案 | ✅ 已定稿（见 docs/技术方案.md v0.3） |
 | 开发规范 | ✅ 已定稿（见 docs/开发规范.md v1.1） |
-| 后端代码 | ⬜ 未开始 |
-| 前端代码 | ⬜ 未开始 |
+| 后端代码 | 🟡 骨架 + 安全核心已完成（v0.02，已跑通：check/migrate/测试/lint） |
+| 前端代码 | ⬜ 未开始（计划 v0.03） |
 
-> 代码尚未开始，本文档先记录**规划架构**，开发推进后逐步替换为**实际架构**。
+> 业务 app（datasource/query/execution）尚未实现，规划见第 3 节。
 
 ---
 
@@ -32,24 +32,31 @@
 
 ---
 
-## 3. 模块（规划）
+## 3. 模块
+
+图例：✅ 已实现　⬜ 规划中
 
 ```
-backend/
-├── config/        # Django 配置、URL、APScheduler 初始化
-├── core/          # oracle_client(只读执行) / excel(导出) / 加密
-└── apps/
-    ├── accounts/    # 用户、Token 认证
-    ├── datasource/  # Oracle 数据源管理
-    ├── query/       # SQL 查询任务、执行、预览
-    └── execution/   # 执行记录、受控下载
+backend/                        ✅ v0.02
+├── config/                     ✅ Django 配置、URL、健康检查
+│   ├── settings.py             ✅ .env 注入、DRF Token、CORS、安全护栏参数
+│   └── urls.py                 ✅ /api/health/
+├── core/                       ✅ 安全核心（含单元测试）
+│   ├── sql_guard.py            ✅ 只读 SQL 校验（第二道防线）
+│   ├── oracle_client.py        ✅ 绑定变量 + 流式 fetch + 行数上限 + 超时
+│   ├── excel.py                ✅ openpyxl 流式导出
+│   └── crypto.py               ✅ Fernet 加解密（数据源密码）
+├── tests/                      ✅ test_sql_guard / test_excel（24 用例）
+└── apps/                       ⬜ 业务应用
+    ├── accounts/               ⬜ 用户、Token 认证
+    ├── datasource/             ⬜ Oracle 数据源管理
+    ├── query/                  ⬜ SQL 查询任务、执行、预览
+    └── execution/              ⬜ 执行记录、受控下载
 
-frontend/
-└── src/
-    ├── views/       # datasource / task / execution / login
-    ├── stores/      # Pinia
-    └── api/         # axios 封装
+frontend/                       ⬜ v0.03（Vue3 + Element Plus）
 ```
+
+> APScheduler 定时调度在业务 app 落地后接入（见技术方案 6.2 / 8.1）。
 
 ---
 
@@ -64,9 +71,26 @@ frontend/
 
 ---
 
-## 5. 接口清单（规划）
+## 5. 接口清单
 
-待后端实现后，在此登记实际生效的 REST 接口（路径、方法、用途、鉴权）。
+| 路径 | 方法 | 用途 | 鉴权 | 状态 |
+|---|---|---|---|---|
+| `/api/health/` | GET | 健康检查 | 无 | ✅ |
+| `/admin/` | - | Django 后台 | 登录 | ✅ |
+
+> 业务接口（数据源/任务/执行/下载）随 app 实现登记。
+
+## 5.1 本地启动（开发，Windows）
+
+```powershell
+cd backend
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+copy .env.example .env   # 然后填写 SECRET_KEY / FERNET_KEY
+.\.venv\Scripts\python.exe manage.py migrate
+.\.venv\Scripts\python.exe manage.py runserver
+# 质量检查：python -m ruff check . / python -m black . / python -m pytest
+```
 
 ---
 

@@ -37,8 +37,17 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework.authtoken",
     "corsheaders",
-    # 业务应用（v0.03 起逐步加入）
+    # 业务应用
+    "apps.accounts",
+    "apps.catalog",
+    "apps.datasource",
+    "apps.dataset",
+    "apps.execution",
+    "apps.permission",
 ]
+
+# 自定义用户模型（含管理角色 / 老板标志）
+AUTH_USER_MODEL = "accounts.User"
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",

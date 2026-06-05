@@ -1,5 +1,13 @@
 <script setup lang="ts">
-import { Coin, DataLine, Document, Files, SwitchButton } from '@element-plus/icons-vue'
+import {
+  Coin,
+  DataLine,
+  Document,
+  Files,
+  Folder,
+  SwitchButton,
+  User as UserIcon,
+} from '@element-plus/icons-vue'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -13,10 +21,12 @@ const pageTitle = computed(() => (route.meta.title as string) ?? '')
 const initial = computed(() => (auth.username || '?').charAt(0).toUpperCase())
 
 const menus = [
-  { index: '/dashboard', title: '工作台', icon: DataLine },
-  { index: '/datasources', title: '数据源', icon: Coin },
-  { index: '/tasks', title: '查询任务', icon: Document },
-  { index: '/executions', title: '执行记录', icon: Files },
+  { index: '/admin/home', title: '工作台', icon: DataLine },
+  { index: '/admin/datasources', title: '数据源', icon: Coin },
+  { index: '/admin/datasets', title: '数据集', icon: Document },
+  { index: '/admin/catalog', title: '目录管理', icon: Folder },
+  { index: '/admin/permission', title: '用户与权限', icon: UserIcon },
+  { index: '/admin/executions', title: '执行记录', icon: Files },
 ]
 
 function handleLogout(): void {
@@ -32,7 +42,7 @@ function handleLogout(): void {
         <div class="brand-mark">DN</div>
         <div class="brand-text">
           <span class="brand-name">data-nexus</span>
-          <span class="brand-sub">数据共享平台</span>
+          <span class="brand-sub">管理端</span>
         </div>
       </div>
 
@@ -47,21 +57,23 @@ function handleLogout(): void {
     <el-container>
       <el-header class="header">
         <span class="page-title">{{ pageTitle }}</span>
-
-        <el-dropdown trigger="click" @command="handleLogout">
-          <div class="user">
-            <el-avatar :size="32" class="avatar">{{ initial }}</el-avatar>
-            <span class="user-name">{{ auth.username }}</span>
-          </div>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="logout">
-                <el-icon><SwitchButton /></el-icon>
-                退出登录
-              </el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <div class="right">
+          <el-button text @click="router.push('/')">切换到用户端</el-button>
+          <el-dropdown trigger="click" @command="handleLogout">
+            <div class="user">
+              <el-avatar :size="32" class="avatar">{{ initial }}</el-avatar>
+              <span class="user-name">{{ auth.username }}</span>
+            </div>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="logout">
+                  <el-icon><SwitchButton /></el-icon>
+                  退出登录
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
       </el-header>
 
       <el-main class="main">
@@ -75,8 +87,6 @@ function handleLogout(): void {
 .layout {
   height: 100vh;
 }
-
-/* ---- 侧边栏（浅色） ---- */
 .aside {
   background: var(--app-surface);
   border-right: 1px solid var(--app-border);
@@ -116,7 +126,6 @@ function handleLogout(): void {
   font-size: 12px;
   color: var(--app-text-secondary);
 }
-
 .menu {
   border-right: none;
   padding: 10px 12px;
@@ -138,8 +147,6 @@ function handleLogout(): void {
   color: var(--el-color-primary);
   font-weight: 600;
 }
-
-/* ---- 顶栏 ---- */
 .header {
   height: 64px;
   background: var(--app-surface);
@@ -152,6 +159,11 @@ function handleLogout(): void {
 .page-title {
   font-size: 17px;
   font-weight: 600;
+}
+.right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 .user {
   display: flex;
@@ -173,8 +185,6 @@ function handleLogout(): void {
   font-size: 14px;
   font-weight: 500;
 }
-
-/* ---- 主体 ---- */
 .main {
   background: var(--app-bg);
   padding: 24px;

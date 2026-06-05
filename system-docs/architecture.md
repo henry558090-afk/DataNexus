@@ -1,7 +1,7 @@
 # data-nexus 当前系统架构
 
 > 本文件是**当前系统的真实快照**，随代码变更同步更新（开发规范第 8 节）。
-> 最近更新：2026-06-05　|　对应版本：**v0.06**（后端数据模型 + 权限可见性判定，dev 分支）
+> 最近更新：2026-06-05　|　对应版本：**v0.07**（前端双布局重构 + 角色分流，dev 分支）
 
 ---
 
@@ -11,8 +11,8 @@
 |---|---|
 | 技术方案 | ✅ 已定稿（见 docs/技术方案.md v0.4） |
 | 开发规范 | ✅ 已定稿（见 docs/开发规范.md v1.1） |
-| 后端代码 | 🟡 安全核心 + 认证 + **数据模型/权限判定**（v0.06，35 测试通过） |
-| 前端代码 | 🟡 骨架 + 浅色 UI（v0.05；双布局重构在 v0.07） |
+| 后端代码 | 🟡 安全核心 + 认证 + 数据模型/权限判定（v0.06，35 测试通过） |
+| 前端代码 | 🟡 **双布局（用户端/管理端）+ 角色分流**（v0.07，build/lint 通过） |
 
 > 当前在 `dev` 分支进行「重构基线」大改版（v0.06 起）。后端模型已落地，API 与前端重构随后续版本推进。
 
@@ -53,14 +53,19 @@ backend/
 │   └── permission/             ✅ DepartmentMembership / Grant + can_view_dataset 可见性判定
 └── tests/                      ✅ sql_guard / excel / permission（35 用例）
 
-frontend/                       🟡 v0.05（浅色 UI；v0.07 将重构为用户端/管理端双布局）
+frontend/                       🟡 v0.07（双布局 + 角色分流，浅色令牌）
 ├── src/style.css               ✅ 浅色设计令牌
 ├── src/api/http.ts             ✅ axios（Token / 401 / 错误提示）
-├── src/stores/auth.ts          ✅ Pinia 登录态
-├── src/router/index.ts         ✅ 路由 + 登录守卫
-├── src/layouts/MainLayout.vue  ✅ 浅色侧边栏 + 顶栏（v0.07 拆分双布局）
-└── src/views/                  🟡 login / dashboard / 占位页
+├── src/stores/auth.ts          ✅ 登录态 + 角色(profile/isManager)
+├── src/router/index.ts         ✅ 路由 + 登录守卫 + 角色分流(requiresManager)
+├── src/layouts/AdminLayout.vue ✅ 管理端（侧边菜单工作台）
+├── src/layouts/UserLayout.vue  ✅ 用户端（门户顶栏，商务风）
+└── src/views/
+    ├── admin/                  🟡 home / 数据源 / 数据集 / 目录 / 权限 / 执行（占位）
+    └── user/CatalogHome.vue    🟡 数据门户首页（占位）
 ```
+
+> 登录后按角色分流：超管/辅助管理员 → `/admin`；普通用户 → `/`（用户端门户）。
 
 > APScheduler 定时调度在数据集运行（v0.09+）后接入（见技术方案 §8.2 / §10.1）。
 
@@ -87,7 +92,7 @@ User（is_superuser / is_assistant_admin / is_boss）
 |---|---|---|---|---|
 | `/api/health/` | GET | 健康检查 | 无 | ✅ |
 | `/api/auth/token/` | POST | 账号密码换 Token | 无 | ✅ |
-| `/api/auth/me/` | GET | 当前登录用户 | Token | ✅ |
+| `/api/auth/me/` | GET | 当前用户 + 角色（is_manager 等） | Token | ✅ |
 | `/admin/` | - | Django 后台 | 登录 | ✅ |
 
 > 业务接口（数据源/数据集/目录/执行/下载/权限）随 app 实现登记。

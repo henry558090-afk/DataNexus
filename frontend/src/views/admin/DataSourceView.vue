@@ -3,15 +3,15 @@ import PageContainer from '@/components/PageContainer.vue'
 </script>
 
 <template>
-  <PageContainer title="执行记录" subtitle="查看历史执行与下载结果文件">
-    <el-card class="placeholder" shadow="never">
-      <el-empty description="执行记录与下载将在 v0.06+ 实现" />
+  <PageContainer title="数据源" subtitle="管理 Oracle 数据源连接（只读）">
+    <el-card class="ph" shadow="never">
+      <el-empty description="数据源 CRUD + 测试连接将在 v0.08 实现" />
     </el-card>
   </PageContainer>
 </template>
 
 <style scoped>
-.placeholder {
+.ph {
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius);
   padding: 24px 0;

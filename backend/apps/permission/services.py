@@ -32,6 +32,10 @@ def can_view_dataset(user, dataset) -> bool:
     ):
         return True
 
+    # 未归类（category 为空）数据集：非管理员一律不可见（管理员/老板已在上面放行）
+    if dataset.category_id is None:
+        return False
+
     department_id = dataset.category.department_id
     membership = DepartmentMembership.objects.filter(user=user, department_id=department_id).first()
 

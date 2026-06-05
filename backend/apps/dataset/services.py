@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 
 from apps.dataset.models import Dataset
@@ -59,15 +60,16 @@ def run_dataset(dataset: Dataset, user=None) -> Execution:
         out_path = out_dir / f"{dataset.name}_{ts}.xlsx"
         row_count = excel.export_to_xlsx(columns, rows, out_path)
 
-        # 切换最新版本标记
-        Execution.objects.filter(dataset=dataset, is_latest=True).update(is_latest=False)
-        execution.status = Execution.Status.SUCCESS
-        execution.row_count = row_count
-        execution.file_path = str(out_path)
-        execution.file_size = out_path.stat().st_size
-        execution.is_latest = True
-        execution.ended_at = timezone.now()
-        execution.save()
+        # 切换最新版本标记 + 落库（原子，避免中途崩溃留下不一致）
+        with transaction.atomic():
+            Execution.objects.filter(dataset=dataset, is_latest=True).update(is_latest=False)
+            execution.status = Execution.Status.SUCCESS
+            execution.row_count = row_count
+            execution.file_path = str(out_path)
+            execution.file_size = out_path.stat().st_size
+            execution.is_latest = True
+            execution.ended_at = timezone.now()
+            execution.save()
     except Exception as exc:  # noqa: BLE001 - 失败信息落库，不抛 500
         execution.status = Execution.Status.FAILED
         execution.error_msg = str(exc)

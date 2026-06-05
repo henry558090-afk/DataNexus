@@ -172,10 +172,15 @@ def _execute_stream(
         columns = [desc[0] for desc in cursor.description]
 
         fetched = 0
+        first = True
         while True:
             batch = cursor.fetchmany(fetch_size)
             if not batch:
+                if first:
+                    # 0 行也要交付列名，保证导出的 Excel 仍有表头
+                    yield columns, []
                 break
+            first = False
             fetched += len(batch)
             if fetched > max_rows:
                 raise QueryRowLimitExceeded(

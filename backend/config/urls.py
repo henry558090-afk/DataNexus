@@ -22,7 +22,7 @@ router.register("executions", ExecutionViewSet, basename="execution")
 
 def health(_request: HttpRequest) -> JsonResponse:
     """健康检查，便于确认服务可用。"""
-    return JsonResponse({"status": "ok", "service": "data-nexus", "version": "v0.09"})
+    return JsonResponse({"status": "ok", "service": "data-nexus", "version": "v0.10"})
 
 
 @api_view(["GET"])

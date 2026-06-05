@@ -1,3 +1,4 @@
+from django.db.models import Prefetch
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.request import Request
@@ -7,13 +8,25 @@ from apps.accounts.permissions import IsManager
 from apps.dataset import services
 from apps.dataset.models import Dataset
 from apps.dataset.serializers import DatasetSerializer
+from apps.execution.models import Execution
 from apps.execution.serializers import ExecutionSerializer
 
 
 class DatasetViewSet(viewsets.ModelViewSet):
     """数据集管理（仅管理员）：CRUD + 预览 + 运行。"""
 
-    queryset = Dataset.objects.select_related("datasource", "category").all()
+    # 预取"最新执行"，避免列表 get_latest 的 N+1 查询
+    queryset = (
+        Dataset.objects.select_related("datasource", "category")
+        .prefetch_related(
+            Prefetch(
+                "executions",
+                queryset=Execution.objects.filter(is_latest=True),
+                to_attr="latest_execs",
+            )
+        )
+        .all()
+    )
     serializer_class = DatasetSerializer
     permission_classes = [IsManager]
 

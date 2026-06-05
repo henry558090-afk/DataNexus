@@ -38,7 +38,12 @@ class DatasetSerializer(serializers.ModelSerializer):
         return value
 
     def get_latest(self, obj: Dataset) -> dict | None:
-        ex = obj.executions.filter(is_latest=True).first()
+        # 列表场景走预取的 latest_execs（避免 N+1）；详情/创建回退到查询
+        prefetched = getattr(obj, "latest_execs", None)
+        if prefetched is not None:
+            ex = prefetched[0] if prefetched else None
+        else:
+            ex = obj.executions.filter(is_latest=True).first()
         if ex is None:
             return None
         return {

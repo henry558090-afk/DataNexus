@@ -118,3 +118,25 @@ def test_member_role_group_grant(world):
 
 def test_unauthenticated_denied(world):
     assert not can_view_dataset(AnonymousUser(), world.fin_ds)
+
+
+# ---- 无分类（草稿）数据集：修复 A 回归 ----
+
+
+def _unfiled_dataset(name: str) -> Dataset:
+    ds = DataSource(name=name + "_src", host="h", port=1521, service_name="s", username="u")
+    ds.save()
+    return Dataset.objects.create(name=name, datasource=ds, sql_text="SELECT 1", category=None)
+
+
+def test_null_category_denied_for_non_admin(db):
+    unfiled = _unfiled_dataset("未归类A")
+    user = make_user("nc1")
+    # 不应抛 AttributeError，且普通用户不可见
+    assert can_view_dataset(user, unfiled) is False
+
+
+def test_null_category_visible_for_admin(db):
+    unfiled = _unfiled_dataset("未归类B")
+    admin = User.objects.create_superuser("rootnc", "r@x.com", "x")
+    assert can_view_dataset(admin, unfiled) is True

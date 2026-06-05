@@ -1,4 +1,28 @@
-/* 全局样式：最小化 reset，让布局占满视口 */
+/* ============ data-nexus 全局样式 · 浅色系设计令牌 ============ */
+:root {
+  /* 覆盖 Element Plus 主色为更耐看的靛蓝 */
+  --el-color-primary: #4f6ef7;
+  --el-color-primary-light-3: #8294fa;
+  --el-color-primary-light-5: #a7b4fb;
+  --el-color-primary-light-7: #ccd4fd;
+  --el-color-primary-light-8: #dde3fe;
+  --el-color-primary-light-9: #eef1fe;
+  --el-color-primary-dark-2: #3f58c5;
+
+  /* 全局圆角更柔和 */
+  --el-border-radius-base: 10px;
+
+  /* 应用层令牌 */
+  --app-bg: #f4f6fb;
+  --app-surface: #ffffff;
+  --app-border: #eceff5;
+  --app-text: #1d2433;
+  --app-text-secondary: #8a93a6;
+  --app-radius: 14px;
+  --app-shadow: 0 1px 2px rgba(29, 36, 51, 0.04), 0 8px 24px rgba(29, 36, 51, 0.06);
+  --app-shadow-sm: 0 1px 2px rgba(29, 36, 51, 0.05);
+}
+
 html,
 body,
 #app {
@@ -8,6 +32,33 @@ body,
 }
 
 body {
-  font-family: system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  color: #303133;
+  font-family:
+    'Inter', system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei',
+    Arial, sans-serif;
+  color: var(--app-text);
+  background: var(--app-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3 {
+  color: var(--app-text);
+}
+
+/* 更精致的滚动条 */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #d6dbe6;
+  border-radius: 8px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #c2c9d6;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
 }

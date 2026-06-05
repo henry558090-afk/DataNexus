@@ -1,8 +1,19 @@
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import PageContainer from '@/components/PageContainer.vue'
+</script>
 
 <template>
-  <div>
-    <h2>数据源</h2>
-    <el-empty description="数据源管理将在 v0.04 实现" />
-  </div>
+  <PageContainer title="数据源" subtitle="管理 Oracle 数据源连接（只读）">
+    <el-card class="placeholder" shadow="never">
+      <el-empty description="数据源管理将在 v0.06 实现" />
+    </el-card>
+  </PageContainer>
 </template>
+
+<style scoped>
+.placeholder {
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius);
+  padding: 24px 0;
+}
+</style>

@@ -53,14 +53,16 @@ backend/                        ✅ v0.02
     ├── query/                  ⬜ SQL 查询任务、执行、预览
     └── execution/              ⬜ 执行记录、受控下载
 
-frontend/                       🟡 v0.03（Vue3 + TS + Element Plus）
+frontend/                       🟡 v0.05（Vue3 + TS + Element Plus，浅色系 UI）
 ├── src/
+│   ├── style.css               ✅ 浅色设计令牌（主色/圆角/阴影，覆盖 Element 主题）
 │   ├── api/http.ts             ✅ axios 实例：注入 Token、401 跳登录、统一错误提示
 │   ├── stores/auth.ts          ✅ Pinia 登录态（Token 持久化）
-│   ├── router/index.ts         ✅ 路由 + 登录守卫（懒加载视图）
-│   ├── layouts/MainLayout.vue  ✅ 侧边菜单 + 顶栏 + 退出
-│   └── views/                  🟡 login(✅) / dashboard(✅连通验证) / datasource·task·execution(占位)
-├── vite.config.ts              ✅ @ 别名 + /api 代理到后端
+│   ├── router/index.ts         ✅ 路由 + 登录守卫（懒加载，meta.title）
+│   ├── layouts/MainLayout.vue  ✅ 浅色侧边栏 + 顶栏(页标题+头像下拉)
+│   ├── components/PageContainer.vue  ✅ 统一页头容器
+│   └── views/                  🟡 login(✅) / dashboard(✅横幅+统计卡) / datasource·task·execution(占位)
+├── vite.config.ts              ✅ @ 别名 + /api 代理到后端（端口 5179）
 └── eslint.config.ts / .prettierrc.json  ✅ ESLint + Prettier
 ```
 

@@ -15,6 +15,8 @@ class Dataset(models.Model):
         on_delete=models.PROTECT,
         related_name="datasets",
         verbose_name="归属分类",
+        null=True,
+        blank=True,
     )
     datasource = models.ForeignKey(
         "datasource.DataSource",
@@ -39,7 +41,6 @@ class Dataset(models.Model):
 
     class Meta:
         ordering = ["-updated_at"]
-        unique_together = [("category", "name")]
         verbose_name = "数据集"
         verbose_name_plural = "数据集"
 

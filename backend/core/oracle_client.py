@@ -116,6 +116,34 @@ def stream_query(
     return first_cols, _rows()
 
 
+def preview_query(
+    params: OracleConnParams,
+    sql: str,
+    binds: Mapping[str, object] | None = None,
+    *,
+    limit: int = 50,
+    timeout_seconds: int = 30,
+) -> tuple[list[str], list[tuple]]:
+    """预览：只取前 ``limit`` 行（不报行数超限），连接用完即关。"""
+    safe_sql = validate_readonly_sql(sql)
+    conn = oracledb.connect(
+        user=params.user,
+        password=params.password,
+        dsn=_build_dsn(params),
+        tcp_connect_timeout=timeout_seconds,
+    )
+    try:
+        conn.call_timeout = timeout_seconds * 1000
+        cursor = conn.cursor()
+        cursor.arraysize = limit
+        cursor.execute(safe_sql, dict(binds or {}))
+        columns = [desc[0] for desc in cursor.description]
+        rows = cursor.fetchmany(limit)
+        return columns, rows
+    finally:
+        conn.close()
+
+
 def _execute_stream(
     params: OracleConnParams,
     sql: str,

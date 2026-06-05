@@ -3,7 +3,7 @@
 > 轻量级企业内部数据共享平台。核心：**把 SQL 跑成 Excel，提供受控下载**。
 > 技术栈：Django + DRF / Vue 3 + Element Plus / APScheduler / SQLite / Oracle。
 
-当前版本：**v0.03**（后端安全核心 + 前端骨架 + 登录认证打通）。
+当前版本：**v0.04**（系统本地可启动；前端端口 5179）。访问 http://localhost:5179
 
 ---
 

@@ -107,7 +107,7 @@ copy .env.example .env   # 然后填写 SECRET_KEY / FERNET_KEY
 ```powershell
 cd frontend
 npm install
-npm run dev      # http://127.0.0.1:5173 ，/api 自动代理到后端 8000
+npm run dev      # http://127.0.0.1:5179 ，/api 自动代理到后端 8000
 # 质量检查：npm run lint / npm run format / npm run build
 ```
 

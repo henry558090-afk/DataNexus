@@ -1,12 +1,24 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
 import http from '@/api/http'
 
-// 登录态：Token + 用户名，持久化到 localStorage
+// 当前用户角色（来自后端 /auth/me/）
+interface Profile {
+  username: string
+  is_superuser: boolean
+  is_assistant_admin: boolean
+  is_boss: boolean
+  is_manager: boolean
+}
+
 export const useAuthStore = defineStore('auth', () => {
   const token = ref<string>(localStorage.getItem('token') ?? '')
-  const username = ref<string>(localStorage.getItem('username') ?? '')
+  const profile = ref<Profile | null>(null)
+
+  const username = computed(() => profile.value?.username ?? localStorage.getItem('username') ?? '')
+  // 是否可进入管理端（超管或辅助管理员）
+  const isManager = computed(() => profile.value?.is_manager ?? false)
 
   async function login(user: string, password: string): Promise<void> {
     const { data } = await http.post<{ token: string }>('/auth/token/', {
@@ -14,17 +26,23 @@ export const useAuthStore = defineStore('auth', () => {
       password,
     })
     token.value = data.token
-    username.value = user
     localStorage.setItem('token', data.token)
     localStorage.setItem('username', user)
+    await fetchProfile()
+  }
+
+  async function fetchProfile(): Promise<Profile> {
+    const { data } = await http.get<Profile>('/auth/me/')
+    profile.value = data
+    return data
   }
 
   function logout(): void {
     token.value = ''
-    username.value = ''
+    profile.value = null
     localStorage.removeItem('token')
     localStorage.removeItem('username')
   }
 
-  return { token, username, login, logout }
+  return { token, profile, username, isManager, login, fetchProfile, logout }
 })

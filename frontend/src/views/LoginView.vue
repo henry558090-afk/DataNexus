@@ -21,7 +21,8 @@ async function handleLogin(): Promise<void> {
   try {
     await auth.login(form.username, form.password)
     ElMessage.success('登录成功')
-    router.push({ path: '/' })
+    // 按角色分流：管理员进管理端，普通用户进数据门户
+    router.push({ path: auth.isManager ? '/admin' : '/' })
   } catch {
     // 错误提示已由 http 拦截器统一处理
   } finally {

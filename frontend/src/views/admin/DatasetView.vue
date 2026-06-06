@@ -211,7 +211,12 @@ async function loadCategories() {
         </el-form-item>
         <el-form-item label="数据源" required>
           <el-select v-model="form.datasource" placeholder="选择数据源" style="width: 100%">
-            <el-option v-for="d in datasources" :key="d.id" :label="d.name" :value="d.id" />
+            <el-option
+              v-for="d in datasources"
+              :key="d.id"
+              :label="`${d.name}（${d.db_type === 'mysql' ? 'MySQL' : 'Oracle'}）`"
+              :value="d.id"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="归类">

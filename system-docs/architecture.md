@@ -1,7 +1,7 @@
 # data-nexus 当前系统架构
 
 > 本文件是**当前系统的真实快照**，随代码变更同步更新（开发规范第 8 节）。
-> 最近更新：2026-06-06　|　对应版本：**v0.12**（用户与权限：角色/部门成员/授权，dev 分支）
+> 最近更新：2026-06-06　|　对应版本：**v0.13**（MySQL 支持 + 首页重做 + 用户端门户重构，dev 分支）
 
 ---
 
@@ -11,8 +11,8 @@
 |---|---|
 | 技术方案 | ✅ 已定稿（见 docs/技术方案.md v0.4） |
 | 开发规范 | ✅ 已定稿（见 docs/开发规范.md v1.1） |
-| 后端代码 | 🟢 全链路（数据源/数据集/SQL→Excel/目录/门户）+ **用户与权限(角色/成员/授权)**（v0.12，66 测试） |
-| 前端代码 | 🟢 管理端(数据源/数据集/目录/**用户权限**) + 用户端门户（v0.12，build/lint 通过） |
+| 后端代码 | 🟢 全链路 + 用户权限 + **Oracle/MySQL 双库取数 + 统计接口**（v0.13，68 测试） |
+| 前端代码 | 🟢 管理端(首页真实统计/数据源含MySQL/数据集/目录/权限) + **重构的用户端门户(树+搜索)**（v0.13） |
 
 > 当前在 `dev` 分支进行「重构基线」大改版（v0.06 起）。后端模型已落地，API 与前端重构随后续版本推进。
 
@@ -25,7 +25,7 @@
 | 后端 | Django + DRF |
 | 调度 | APScheduler（单进程，后续接入） |
 | 元数据库 | SQLite |
-| 业务数据源 | Oracle（python-oracledb thin） |
+| 业务数据源 | **Oracle（oracledb thin）/ MySQL（PyMySQL）** —— core/db.py 统一 |
 | Excel | openpyxl |
 | 前端 | Vue 3 + TypeScript + Element Plus + Pinia + Vite |
 | 认证 | 自定义 User + DRF Token |
@@ -41,7 +41,7 @@ backend/
 ├── config/                     ✅ settings(.env/DRF Token/CORS/护栏) + urls + 健康检查
 ├── core/                       ✅ 安全核心（含单测）
 │   ├── sql_guard.py            ✅ 只读 SQL 校验
-│   ├── oracle_client.py        ✅ 绑定变量 + 流式 fetch + 行数上限 + 超时
+│   ├── db.py                   ✅ Oracle/MySQL 统一取数（绑定变量+流式+行数上限+超时）
 │   ├── excel.py                ✅ openpyxl 流式导出
 │   └── crypto.py               ✅ Fernet 加解密
 ├── apps/                       🟡 业务应用（v0.06 模型层；API/视图随 v0.08+）
@@ -96,6 +96,7 @@ User（is_superuser / is_assistant_admin / is_boss）
 | `/api/health/` | GET | 健康检查 | 无 | ✅ |
 | `/api/auth/token/` | POST | 账号密码换 Token | 无 | ✅ |
 | `/api/auth/me/` | GET | 当前用户 + 角色（is_manager 等） | Token | ✅ |
+| `/api/stats/` | GET | 管理端首页统计（数据源/数据集/执行/今日） | 管理员 | ✅ |
 | `/api/datasources/` | GET/POST | 数据源列表/新建 | 管理员 | ✅ |
 | `/api/datasources/{id}/` | GET/PATCH/DELETE | 数据源详情/改/删 | 管理员 | ✅ |
 | `/api/datasources/{id}/test/` | POST | 测试已保存数据源连接 | 管理员 | ✅ |

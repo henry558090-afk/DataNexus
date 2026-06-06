@@ -4,6 +4,7 @@ djangorestframework>=3.15,<3.16
 django-cors-headers>=4.4
 django-environ>=0.11
 oracledb>=2.5         # python-oracledb 驱动，PyPI 包名为 oracledb（thin 模式免装客户端）
+PyMySQL>=1.1          # MySQL 纯 Python 驱动（免系统依赖）
 openpyxl>=3.1
 cryptography>=42
 

@@ -20,6 +20,7 @@ class DataSourceSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
+            "db_type",
             "host",
             "port",
             "service_name",

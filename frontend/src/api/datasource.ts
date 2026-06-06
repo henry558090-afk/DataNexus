@@ -1,8 +1,11 @@
 import http from '@/api/http'
 
+export type DbType = 'oracle' | 'mysql'
+
 export interface DataSource {
   id: number
   name: string
+  db_type: DbType
   host: string
   port: number
   service_name: string
@@ -13,6 +16,7 @@ export interface DataSource {
 
 export interface DataSourceInput {
   name: string
+  db_type: DbType
   host: string
   port: number
   service_name: string

@@ -7,7 +7,12 @@ from core import crypto
 class DataSource(models.Model):
     """Oracle 数据源连接。密码加密存储，绝不明文落库。"""
 
+    class DbType(models.TextChoices):
+        ORACLE = "oracle", "Oracle"
+        MYSQL = "mysql", "MySQL"
+
     name = models.CharField("名称", max_length=100, unique=True)
+    db_type = models.CharField("类型", max_length=20, choices=DbType.choices, default=DbType.ORACLE)
     host = models.CharField("主机", max_length=200)
     port = models.IntegerField("端口", default=1521)
     service_name = models.CharField("服务名", max_length=100)

@@ -9,7 +9,7 @@ from rest_framework.test import APIClient
 from apps.dataset.models import Dataset
 from apps.datasource.models import DataSource
 from apps.execution.models import Execution
-from core import oracle_client
+from core import db
 
 User = get_user_model()
 
@@ -60,7 +60,7 @@ def test_create_ok_sets_owner(manager, datasource):
 
 def test_preview(manager, datasource, monkeypatch):
     ds = make_dataset(datasource)
-    monkeypatch.setattr(oracle_client, "preview_query", lambda *a, **k: (["a", "b"], [(1, 2)]))
+    monkeypatch.setattr(db, "preview_query", lambda *a, **k: (["a", "b"], [(1, 2)]))
     resp = client_for(manager).post(f"/api/datasets/{ds.id}/preview/")
     assert resp.data["ok"] is True
     assert resp.data["columns"] == ["a", "b"]
@@ -73,7 +73,7 @@ def test_run_generates_excel(manager, datasource, monkeypatch, settings, tmp_pat
     def fake_stream(params, sql, **kwargs):
         return ["a", "b"], iter([(1, 2), (3, 4)])
 
-    monkeypatch.setattr(oracle_client, "stream_query", fake_stream)
+    monkeypatch.setattr(db, "stream_query", fake_stream)
     resp = client_for(manager).post(f"/api/datasets/{ds.id}/run/")
     assert resp.status_code == 200
     assert resp.data["status"] == "success"
@@ -86,7 +86,7 @@ def test_run_generates_excel(manager, datasource, monkeypatch, settings, tmp_pat
 def test_run_marks_only_latest(manager, datasource, monkeypatch, settings, tmp_path):
     settings.MEDIA_ROOT = str(tmp_path)
     ds = make_dataset(datasource)
-    monkeypatch.setattr(oracle_client, "stream_query", lambda *a, **k: (["a"], iter([(1,)])))
+    monkeypatch.setattr(db, "stream_query", lambda *a, **k: (["a"], iter([(1,)])))
     client = client_for(manager)
     e1 = client.post(f"/api/datasets/{ds.id}/run/").data["id"]
     e2 = client.post(f"/api/datasets/{ds.id}/run/").data["id"]
@@ -101,7 +101,7 @@ def test_run_failure_records_error(manager, datasource, monkeypatch, settings, t
     def boom(*a, **k):
         raise RuntimeError("ORA-00942 table not found")
 
-    monkeypatch.setattr(oracle_client, "stream_query", boom)
+    monkeypatch.setattr(db, "stream_query", boom)
     resp = client_for(manager).post(f"/api/datasets/{ds.id}/run/")
     assert resp.data["status"] == "failed"
     assert "ORA-00942" in resp.data["error_msg"]
@@ -110,7 +110,7 @@ def test_run_failure_records_error(manager, datasource, monkeypatch, settings, t
 def test_download(manager, datasource, monkeypatch, settings, tmp_path):
     settings.MEDIA_ROOT = str(tmp_path)
     ds = make_dataset(datasource)
-    monkeypatch.setattr(oracle_client, "stream_query", lambda *a, **k: (["a"], iter([(1,)])))
+    monkeypatch.setattr(db, "stream_query", lambda *a, **k: (["a"], iter([(1,)])))
     client = client_for(manager)
     eid = client.post(f"/api/datasets/{ds.id}/run/").data["id"]
     resp = client.get(f"/api/executions/{eid}/download/")

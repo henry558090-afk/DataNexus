@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 
 from apps.datasource.models import DataSource
-from core import oracle_client
+from core import db
 
 User = get_user_model()
 
@@ -75,7 +75,7 @@ def test_test_connection_action_ok(manager, monkeypatch):
     ds = DataSource(name="ora3", host="h", port=1521, service_name="s", username="u")
     ds.password = "p"
     ds.save()
-    monkeypatch.setattr(oracle_client, "test_connection", lambda params, **k: None)
+    monkeypatch.setattr(db, "test_connection", lambda params, **k: None)
     resp = auth_client(manager).post(f"/api/datasources/{ds.id}/test/")
     assert resp.status_code == 200
     assert resp.data["ok"] is True
@@ -89,14 +89,14 @@ def test_test_connection_action_fail(manager, monkeypatch):
     def boom(params, **k):
         raise RuntimeError("ORA-12541 no listener")
 
-    monkeypatch.setattr(oracle_client, "test_connection", boom)
+    monkeypatch.setattr(db, "test_connection", boom)
     resp = auth_client(manager).post(f"/api/datasources/{ds.id}/test/")
     assert resp.data["ok"] is False
     assert "ORA-12541" in resp.data["message"]
 
 
 def test_test_connection_params_endpoint(manager, monkeypatch):
-    monkeypatch.setattr(oracle_client, "test_connection", lambda params, **k: None)
+    monkeypatch.setattr(db, "test_connection", lambda params, **k: None)
     resp = auth_client(manager).post(
         "/api/datasources/test-connection/",
         {
@@ -109,3 +109,27 @@ def test_test_connection_params_endpoint(manager, monkeypatch):
         format="json",
     )
     assert resp.data["ok"] is True
+
+
+def test_create_mysql_datasource(manager):
+    resp = auth_client(manager).post(
+        "/api/datasources/",
+        {
+            "name": "mysql1",
+            "db_type": "mysql",
+            "host": "h",
+            "port": 3306,
+            "service_name": "appdb",
+            "username": "ro",
+            "password": "p",
+        },
+        format="json",
+    )
+    assert resp.status_code == 201
+    assert resp.data["db_type"] == "mysql"
+
+
+def test_stats_endpoint(manager):
+    resp = auth_client(manager).get("/api/stats/")
+    assert resp.status_code == 200
+    assert "datasources" in resp.data and "today_runs" in resp.data

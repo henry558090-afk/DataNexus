@@ -10,6 +10,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.routers import DefaultRouter
 
+from apps.accounts.permissions import IsManager
 from apps.accounts.views import UserViewSet
 from apps.catalog import portal
 from apps.catalog.views import CategoryViewSet, DepartmentViewSet
@@ -31,7 +32,28 @@ router.register("grants", GrantViewSet, basename="grant")
 
 def health(_request: HttpRequest) -> JsonResponse:
     """健康检查，便于确认服务可用。"""
-    return JsonResponse({"status": "ok", "service": "data-nexus", "version": "v0.12"})
+    return JsonResponse({"status": "ok", "service": "data-nexus", "version": "v0.13"})
+
+
+@api_view(["GET"])
+@permission_classes([IsManager])
+def stats(_request: Request) -> Response:
+    """管理端首页统计。"""
+    from django.utils import timezone
+
+    from apps.dataset.models import Dataset
+    from apps.datasource.models import DataSource
+    from apps.execution.models import Execution
+
+    today = timezone.localdate()
+    return Response(
+        {
+            "datasources": DataSource.objects.count(),
+            "datasets": Dataset.objects.count(),
+            "executions": Execution.objects.count(),
+            "today_runs": Execution.objects.filter(started_at__date=today).count(),
+        }
+    )
 
 
 @api_view(["GET"])
@@ -56,6 +78,7 @@ urlpatterns = [
     path("api/health/", health, name="health"),
     path("api/auth/token/", obtain_auth_token, name="auth-token"),  # 账号密码换 Token
     path("api/auth/me/", me, name="auth-me"),
+    path("api/stats/", stats, name="stats"),
     path("api/", include(router.urls)),  # /api/datasources/ ...
     # 用户端数据门户（按可见性）
     path("api/portal/tree/", portal.portal_tree, name="portal-tree"),

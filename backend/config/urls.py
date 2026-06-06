@@ -10,11 +10,13 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.routers import DefaultRouter
 
+from apps.accounts.views import UserViewSet
 from apps.catalog import portal
 from apps.catalog.views import CategoryViewSet, DepartmentViewSet
 from apps.dataset.views import DatasetViewSet
 from apps.datasource.views import DataSourceViewSet
 from apps.execution.views import ExecutionViewSet
+from apps.permission.views import GrantViewSet, MembershipViewSet
 
 router = DefaultRouter()
 router.register("datasources", DataSourceViewSet, basename="datasource")
@@ -22,11 +24,14 @@ router.register("datasets", DatasetViewSet, basename="dataset")
 router.register("executions", ExecutionViewSet, basename="execution")
 router.register("departments", DepartmentViewSet, basename="department")
 router.register("categories", CategoryViewSet, basename="category")
+router.register("users", UserViewSet, basename="user")
+router.register("memberships", MembershipViewSet, basename="membership")
+router.register("grants", GrantViewSet, basename="grant")
 
 
 def health(_request: HttpRequest) -> JsonResponse:
     """健康检查，便于确认服务可用。"""
-    return JsonResponse({"status": "ok", "service": "data-nexus", "version": "v0.11"})
+    return JsonResponse({"status": "ok", "service": "data-nexus", "version": "v0.12"})
 
 
 @api_view(["GET"])

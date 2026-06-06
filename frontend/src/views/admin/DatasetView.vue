@@ -14,6 +14,7 @@ import {
   runDataset,
   updateDataset,
 } from '@/api/dataset'
+import { type Category, listCategories } from '@/api/catalog'
 import { type DataSource, listDataSources } from '@/api/datasource'
 import { downloadExecution } from '@/api/execution'
 import PageContainer from '@/components/PageContainer.vue'
@@ -21,6 +22,7 @@ import PageContainer from '@/components/PageContainer.vue'
 const loading = ref(false)
 const rows = ref<Dataset[]>([])
 const datasources = ref<DataSource[]>([])
+const categories = ref<Category[]>([])
 
 const dialogVisible = ref(false)
 const editingId = ref<number | null>(null)
@@ -32,7 +34,13 @@ const preview = ref<PreviewResult | null>(null)
 
 const runningId = ref<number | null>(null)
 
-const form = reactive<DatasetInput>({ name: '', description: '', datasource: null, sql_text: '' })
+const form = reactive<DatasetInput>({
+  name: '',
+  description: '',
+  datasource: null,
+  category: null,
+  sql_text: '',
+})
 
 async function load() {
   loading.value = true
@@ -45,7 +53,13 @@ async function load() {
 
 function openCreate() {
   editingId.value = null
-  Object.assign(form, { name: '', description: '', datasource: null, sql_text: '' })
+  Object.assign(form, {
+    name: '',
+    description: '',
+    datasource: null,
+    category: null,
+    sql_text: '',
+  })
   dialogVisible.value = true
 }
 
@@ -55,6 +69,7 @@ function openEdit(row: Dataset) {
     name: row.name,
     description: row.description,
     datasource: row.datasource,
+    category: row.category,
     sql_text: row.sql_text,
   })
   dialogVisible.value = true
@@ -125,11 +140,15 @@ async function handleDelete(row: Dataset) {
 }
 
 onMounted(async () => {
-  await Promise.all([load(), loadDatasources()])
+  await Promise.all([load(), loadDatasources(), loadCategories()])
 })
 
 async function loadDatasources() {
   datasources.value = (await listDataSources()).data
+}
+
+async function loadCategories() {
+  categories.value = (await listCategories()).data
 }
 </script>
 
@@ -193,6 +212,21 @@ async function loadDatasources() {
         <el-form-item label="数据源" required>
           <el-select v-model="form.datasource" placeholder="选择数据源" style="width: 100%">
             <el-option v-for="d in datasources" :key="d.id" :label="d.name" :value="d.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="归类">
+          <el-select
+            v-model="form.category"
+            placeholder="未归类（用户端不可见，仅管理员）"
+            clearable
+            style="width: 100%"
+          >
+            <el-option
+              v-for="c in categories"
+              :key="c.id"
+              :label="`${c.department_name} / ${c.name}`"
+              :value="c.id"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="说明">

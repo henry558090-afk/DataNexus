@@ -10,6 +10,8 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.routers import DefaultRouter
 
+from apps.catalog import portal
+from apps.catalog.views import CategoryViewSet, DepartmentViewSet
 from apps.dataset.views import DatasetViewSet
 from apps.datasource.views import DataSourceViewSet
 from apps.execution.views import ExecutionViewSet
@@ -18,11 +20,13 @@ router = DefaultRouter()
 router.register("datasources", DataSourceViewSet, basename="datasource")
 router.register("datasets", DatasetViewSet, basename="dataset")
 router.register("executions", ExecutionViewSet, basename="execution")
+router.register("departments", DepartmentViewSet, basename="department")
+router.register("categories", CategoryViewSet, basename="category")
 
 
 def health(_request: HttpRequest) -> JsonResponse:
     """健康检查，便于确认服务可用。"""
-    return JsonResponse({"status": "ok", "service": "data-nexus", "version": "v0.10"})
+    return JsonResponse({"status": "ok", "service": "data-nexus", "version": "v0.11"})
 
 
 @api_view(["GET"])
@@ -48,4 +52,10 @@ urlpatterns = [
     path("api/auth/token/", obtain_auth_token, name="auth-token"),  # 账号密码换 Token
     path("api/auth/me/", me, name="auth-me"),
     path("api/", include(router.urls)),  # /api/datasources/ ...
+    # 用户端数据门户（按可见性）
+    path("api/portal/tree/", portal.portal_tree, name="portal-tree"),
+    path("api/portal/datasets/<int:pk>/", portal.portal_dataset_detail, name="portal-dataset"),
+    path(
+        "api/portal/executions/<int:pk>/download/", portal.portal_download, name="portal-download"
+    ),
 ]

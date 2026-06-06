@@ -26,6 +26,7 @@ export interface DatasetInput {
   name: string
   description?: string
   datasource: number | null
+  category?: number | null
   sql_text: string
 }
 

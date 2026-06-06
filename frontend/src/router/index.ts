@@ -66,6 +66,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/user/CatalogHome.vue'),
         meta: { title: '数据目录' },
       },
+      {
+        path: 'dataset/:id',
+        name: 'user-dataset',
+        component: () => import('@/views/user/DatasetDetail.vue'),
+        meta: { title: '数据详情' },
+      },
     ],
   },
 ]

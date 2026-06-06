@@ -52,6 +52,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/admin/ExecutionView.vue'),
         meta: { title: '执行记录' },
       },
+      {
+        path: 'audit',
+        name: 'admin-audit',
+        component: () => import('@/views/admin/AuditView.vue'),
+        meta: { title: '审计日志' },
+      },
     ],
   },
   // ---- 用户端（普通用户，管理员也可浏览）----

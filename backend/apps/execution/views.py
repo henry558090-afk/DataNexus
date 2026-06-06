@@ -7,19 +7,19 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.accounts.permissions import IsManager
+from apps.audit.services import log
 from apps.execution.models import Execution
 from apps.execution.serializers import ExecutionSerializer
+from core.pagination import DefaultPagination
 
 
 class ExecutionViewSet(viewsets.ReadOnlyModelViewSet):
-    """执行记录（仅管理员）：列表/详情 + 下载文件。
-
-    支持 ?dataset=<id> 过滤。用户端下载（含可见性判定）在 v0.10+ 实现。
-    """
+    """执行记录（仅管理员）：列表/详情 + 下载文件。分页。支持 ?dataset 过滤。"""
 
     queryset = Execution.objects.select_related("dataset").all()
     serializer_class = ExecutionSerializer
     permission_classes = [IsManager]
+    pagination_class = DefaultPagination
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -34,6 +34,7 @@ class ExecutionViewSet(viewsets.ReadOnlyModelViewSet):
         execution = self.get_object()
         if not execution.file_path or not Path(execution.file_path).exists():
             return Response({"detail": "文件不存在"}, status=404)
+        log("download", request=request, target=execution.dataset.name)
         return FileResponse(
             open(execution.file_path, "rb"),
             as_attachment=True,

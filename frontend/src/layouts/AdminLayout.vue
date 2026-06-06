@@ -5,6 +5,7 @@ import {
   Document,
   Files,
   Folder,
+  List,
   SwitchButton,
   User as UserIcon,
 } from '@element-plus/icons-vue'
@@ -27,6 +28,7 @@ const menus = [
   { index: '/admin/catalog', title: '目录管理', icon: Folder },
   { index: '/admin/permission', title: '用户与权限', icon: UserIcon },
   { index: '/admin/executions', title: '执行记录', icon: Files },
+  { index: '/admin/audit', title: '审计日志', icon: List },
 ]
 
 function handleLogout(): void {

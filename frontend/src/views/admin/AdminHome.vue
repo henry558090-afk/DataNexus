@@ -61,7 +61,7 @@ function fmtTime(s: string): string {
 onMounted(async () => {
   const [s, ex] = await Promise.all([getStats(), listExecutions()])
   stats.value = s.data
-  recent.value = ex.data.slice(0, 8)
+  recent.value = ex.data.results.slice(0, 8)
 })
 </script>
 

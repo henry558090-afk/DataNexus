@@ -1,7 +1,7 @@
 # data-nexus 当前系统架构
 
 > 本文件是**当前系统的真实快照**，随代码变更同步更新（开发规范第 8 节）。
-> 最近更新：2026-06-06　|　对应版本：**v0.14**（定时调度 + 执行历史保留，dev 分支）
+> 最近更新：2026-06-06　|　对应版本：**v0.15**（审计日志 + 列表分页 + 生产安全加固，dev 分支）
 
 ---
 
@@ -11,8 +11,8 @@
 |---|---|
 | 技术方案 | ✅ 已定稿（见 docs/技术方案.md v0.4） |
 | 开发规范 | ✅ 已定稿（见 docs/开发规范.md v1.1） |
-| 后端代码 | 🟢 全链路 + 用户权限 + **Oracle/MySQL 双库取数 + 统计接口**（v0.13，68 测试） |
-| 前端代码 | 🟢 管理端(首页真实统计/数据源含MySQL/数据集/目录/权限) + **重构的用户端门户(树+搜索)**（v0.13） |
+| 后端代码 | 🟢 全链路 + 双库 + **定时调度 + 历史保留 + 审计 + 分页 + 安全加固**（v0.15，79 测试） |
+| 前端代码 | 🟢 管理端(首页/数据源/数据集含定时/目录/权限/**审计**) + 用户端门户（v0.15） |
 
 > 当前在 `dev` 分支进行「重构基线」大改版（v0.06 起）。后端模型已落地，API 与前端重构随后续版本推进。
 
@@ -50,7 +50,9 @@ backend/
 │   ├── datasource/             ✅ DataSource + API（CRUD/测试连接，仅管理员）
 │   ├── dataset/                ✅ Dataset + API（CRUD/预览/运行→Excel；services.run_dataset；category 可空=未归类）
 │   ├── execution/              ✅ Execution + API（列表/下载，FileResponse 流式）
-│   └── permission/             ✅ DepartmentMembership / Grant + can_view_dataset 可见性判定
+│   ├── permission/             ✅ DepartmentMembership / Grant + can_view_dataset 可见性判定
+│   └── audit/                  ✅ AuditLog + log()（登录/运行/下载留痕）
+core/ 另含：db.py(双库取数) / scheduler.py(定时) / pagination.py / excel / crypto / sql_guard
 └── tests/                      ✅ sql_guard / excel / permission（35 用例）
 
 frontend/                       🟡 v0.07（双布局 + 角色分流，浅色令牌）
@@ -113,7 +115,11 @@ User（is_superuser / is_assistant_admin / is_boss）
 | `/api/users/` | CRUD | 用户管理 + 角色（辅助管理员看不到超管） | 管理员 | ✅ |
 | `/api/memberships/` | CRUD | 部门成员（总监/主管/成员 + 看全部） | 管理员 | ✅ |
 | `/api/grants/` | CRUD | 成员授权（个人/角色组 → 分类/数据集） | 管理员 | ✅ |
+| `/api/audit-logs/` | GET | 审计日志（分页，?action/?user 过滤） | 管理员 | ✅ |
 | `/admin/` | - | Django 后台 | 登录 | ✅ |
+
+> 列表分页：`/api/executions/`、`/api/audit-logs/` 返回 `{count,next,previous,results}`（page_size=20）；其余列表为完整数组。
+> 审计：登录、运行数据集、下载文件均留痕（账号/动作/对象/IP/时间）。
 
 > 数据源密码 write_only，永不回显；接口仅管理员（IsManager）。其余业务接口随 app 实现登记。
 

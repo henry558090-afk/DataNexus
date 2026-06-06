@@ -68,6 +68,9 @@ def portal_download(request: Request, pk: int):
         return Response({"detail": "无权限下载"}, status=403)
     if not execution.file_path or not Path(execution.file_path).exists():
         return Response({"detail": "文件不存在"}, status=404)
+    from apps.audit.services import log
+
+    log("download", request=request, target=execution.dataset.name)
     return FileResponse(
         open(execution.file_path, "rb"),
         as_attachment=True,

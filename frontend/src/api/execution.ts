@@ -1,4 +1,5 @@
 import http from '@/api/http'
+import type { Paginated } from '@/api/types'
 
 export interface Execution {
   id: number
@@ -13,10 +14,8 @@ export interface Execution {
   is_latest: boolean
 }
 
-export function listExecutions(datasetId?: number) {
-  return http.get<Execution[]>('/executions/', {
-    params: datasetId ? { dataset: datasetId } : {},
-  })
+export function listExecutions(params: { dataset?: number; page?: number } = {}) {
+  return http.get<Paginated<Execution>>('/executions/', { params })
 }
 
 // 带 Token 拉取 blob 再触发下载（anchor 无法带鉴权头）

@@ -8,6 +8,9 @@ import PageContainer from '@/components/PageContainer.vue'
 
 const loading = ref(false)
 const rows = ref<Execution[]>([])
+const page = ref(1)
+const total = ref(0)
+const pageSize = 20
 
 const statusMeta: Record<string, { text: string; type: 'success' | 'danger' | 'info' }> = {
   success: { text: '成功', type: 'success' },
@@ -18,10 +21,17 @@ const statusMeta: Record<string, { text: string; type: 'success' | 'danger' | 'i
 async function load() {
   loading.value = true
   try {
-    rows.value = (await listExecutions()).data
+    const { data } = await listExecutions({ page: page.value })
+    rows.value = data.results
+    total.value = data.count
   } finally {
     loading.value = false
   }
+}
+
+function onPage(p: number) {
+  page.value = p
+  load()
 }
 
 async function handleDownload(row: Execution) {
@@ -76,6 +86,15 @@ onMounted(load)
           <el-empty description="还没有执行记录" />
         </template>
       </el-table>
+      <div v-if="total > pageSize" class="pager">
+        <el-pagination
+          layout="prev, pager, next, total"
+          :total="total"
+          :page-size="pageSize"
+          :current-page="page"
+          @current-change="onPage"
+        />
+      </div>
     </el-card>
   </PageContainer>
 </template>
@@ -84,5 +103,10 @@ onMounted(load)
 .card {
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius);
+}
+.pager {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 </style>

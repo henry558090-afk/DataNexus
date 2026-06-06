@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "apps.dataset",
     "apps.execution",
     "apps.permission",
+    "apps.audit",
 ]
 
 # 自定义用户模型（含管理角色 / 老板标志）
@@ -131,3 +132,14 @@ QUERY_TIMEOUT_SECONDS = env("QUERY_TIMEOUT_SECONDS")
 QUERY_FETCH_SIZE = env("QUERY_FETCH_SIZE")
 # 每个数据集保留最近 N 次执行/文件，超出自动清理
 EXECUTION_KEEP = env("EXECUTION_KEEP")
+
+# ---- 安全加固 ----
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = "DENY"
+if not DEBUG:
+    # 仅生产启用，避免开发期 https 相关设置影响本地调试
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True

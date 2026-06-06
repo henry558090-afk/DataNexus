@@ -3,7 +3,6 @@
 from django.contrib import admin
 from django.http import HttpRequest, JsonResponse
 from django.urls import include, path
-from rest_framework.authtoken.views import obtain_auth_token
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -11,7 +10,8 @@ from rest_framework.response import Response
 from rest_framework.routers import DefaultRouter
 
 from apps.accounts.permissions import IsManager
-from apps.accounts.views import UserViewSet
+from apps.accounts.views import LoginView, UserViewSet
+from apps.audit.views import AuditLogViewSet
 from apps.catalog import portal
 from apps.catalog.views import CategoryViewSet, DepartmentViewSet
 from apps.dataset.views import DatasetViewSet
@@ -28,11 +28,12 @@ router.register("categories", CategoryViewSet, basename="category")
 router.register("users", UserViewSet, basename="user")
 router.register("memberships", MembershipViewSet, basename="membership")
 router.register("grants", GrantViewSet, basename="grant")
+router.register("audit-logs", AuditLogViewSet, basename="audit-log")
 
 
 def health(_request: HttpRequest) -> JsonResponse:
     """健康检查，便于确认服务可用。"""
-    return JsonResponse({"status": "ok", "service": "data-nexus", "version": "v0.14"})
+    return JsonResponse({"status": "ok", "service": "data-nexus", "version": "v0.15"})
 
 
 @api_view(["GET"])
@@ -76,7 +77,7 @@ def me(request: Request) -> Response:
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/health/", health, name="health"),
-    path("api/auth/token/", obtain_auth_token, name="auth-token"),  # 账号密码换 Token
+    path("api/auth/token/", LoginView.as_view(), name="auth-token"),  # 账号密码换 Token + 审计
     path("api/auth/me/", me, name="auth-me"),
     path("api/stats/", stats, name="stats"),
     path("api/", include(router.urls)),  # /api/datasources/ ...

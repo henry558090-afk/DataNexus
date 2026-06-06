@@ -43,6 +43,9 @@ class DatasetViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def run(self, request: Request, pk: str | None = None) -> Response:
         """运行数据集 → 生成 Excel。返回本次执行记录。"""
+        from apps.audit.services import log
+
         dataset = self.get_object()
         execution = services.run_dataset(dataset, user=request.user)
+        log("run", request=request, target=dataset.name)
         return Response(ExecutionSerializer(execution).data)

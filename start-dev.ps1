@@ -5,7 +5,7 @@ $root = $PSScriptRoot
 
 Start-Process powershell -ArgumentList @(
     '-NoExit', '-Command',
-    "Set-Location '$root\backend'; .\.venv\Scripts\python.exe manage.py runserver 127.0.0.1:8000"
+    "Set-Location '$root\backend'; .\.venv\Scripts\python.exe manage.py runserver 127.0.0.1:8010"
 )
 
 Start-Process powershell -ArgumentList @(
@@ -14,5 +14,5 @@ Start-Process powershell -ArgumentList @(
 )
 
 Write-Host ''
-Write-Host 'Started: backend http://127.0.0.1:8000  /  frontend http://localhost:5179' -ForegroundColor Green
+Write-Host 'Started: backend http://127.0.0.1:8010  /  frontend http://localhost:5179' -ForegroundColor Green
 Write-Host 'Open http://localhost:5179  (login: admin / admin12345)' -ForegroundColor Green

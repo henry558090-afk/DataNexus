@@ -32,7 +32,7 @@ router.register("grants", GrantViewSet, basename="grant")
 
 def health(_request: HttpRequest) -> JsonResponse:
     """健康检查，便于确认服务可用。"""
-    return JsonResponse({"status": "ok", "service": "data-nexus", "version": "v0.13"})
+    return JsonResponse({"status": "ok", "service": "data-nexus", "version": "v0.14"})
 
 
 @api_view(["GET"])

@@ -16,6 +16,8 @@ export interface Dataset {
   datasource: number
   datasource_name: string
   sql_text: string
+  cron: string
+  interval_minutes: number | null
   is_active: boolean
   created_at: string
   updated_at: string
@@ -28,6 +30,8 @@ export interface DatasetInput {
   datasource: number | null
   category?: number | null
   sql_text: string
+  cron?: string
+  interval_minutes?: number | null
 }
 
 export interface PreviewResult {

@@ -42,6 +42,62 @@ const form = reactive<DatasetInput>({
   sql_text: '',
 })
 
+type ScheduleType = 'manual' | 'interval' | 'daily' | 'cron'
+const schedule = reactive({ type: 'manual' as ScheduleType, interval: 60, time: '08:00', cron: '' })
+
+function resetSchedule() {
+  schedule.type = 'manual'
+  schedule.interval = 60
+  schedule.time = '08:00'
+  schedule.cron = ''
+}
+
+function scheduleToFields(): { cron: string; interval_minutes: number | null } {
+  if (schedule.type === 'interval') return { cron: '', interval_minutes: schedule.interval }
+  if (schedule.type === 'daily') {
+    const [h, m] = schedule.time.split(':')
+    return { cron: `${Number(m)} ${Number(h)} * * *`, interval_minutes: null }
+  }
+  if (schedule.type === 'cron') return { cron: schedule.cron.trim(), interval_minutes: null }
+  return { cron: '', interval_minutes: null }
+}
+
+function fieldsToSchedule(row: Dataset) {
+  resetSchedule()
+  if (row.cron) {
+    const p = row.cron.trim().split(/\s+/)
+    if (
+      p.length === 5 &&
+      p[2] === '*' &&
+      p[3] === '*' &&
+      p[4] === '*' &&
+      /^\d+$/.test(p[0]) &&
+      /^\d+$/.test(p[1])
+    ) {
+      schedule.type = 'daily'
+      schedule.time = `${p[1].padStart(2, '0')}:${p[0].padStart(2, '0')}`
+    } else {
+      schedule.type = 'cron'
+      schedule.cron = row.cron
+    }
+  } else if (row.interval_minutes) {
+    schedule.type = 'interval'
+    schedule.interval = row.interval_minutes
+  }
+}
+
+function scheduleSummary(row: Dataset): string {
+  if (row.cron) {
+    const p = row.cron.trim().split(/\s+/)
+    if (p.length === 5 && p[2] === '*' && p[3] === '*' && p[4] === '*') {
+      return `每天 ${p[1].padStart(2, '0')}:${p[0].padStart(2, '0')}`
+    }
+    return `cron: ${row.cron}`
+  }
+  if (row.interval_minutes) return `每 ${row.interval_minutes} 分钟`
+  return '手动'
+}
+
 async function load() {
   loading.value = true
   try {
@@ -60,6 +116,7 @@ function openCreate() {
     category: null,
     sql_text: '',
   })
+  resetSchedule()
   dialogVisible.value = true
 }
 
@@ -72,6 +129,7 @@ function openEdit(row: Dataset) {
     category: row.category,
     sql_text: row.sql_text,
   })
+  fieldsToSchedule(row)
   dialogVisible.value = true
 }
 
@@ -82,11 +140,12 @@ async function handleSave() {
   }
   saving.value = true
   try {
+    const payload = { ...form, ...scheduleToFields() }
     if (editingId.value) {
-      await updateDataset(editingId.value, { ...form })
+      await updateDataset(editingId.value, payload)
       ElMessage.success('已更新')
     } else {
-      await createDataset({ ...form })
+      await createDataset(payload)
       ElMessage.success('已创建')
     }
     dialogVisible.value = false
@@ -162,6 +221,9 @@ async function loadCategories() {
       <el-table v-loading="loading" :data="rows" stripe>
         <el-table-column prop="name" label="名称" min-width="150" />
         <el-table-column prop="datasource_name" label="数据源" min-width="120" />
+        <el-table-column label="定时" min-width="120">
+          <template #default="{ row }">{{ scheduleSummary(row) }}</template>
+        </el-table-column>
         <el-table-column label="最新结果" min-width="150">
           <template #default="{ row }">
             <template v-if="row.latest">
@@ -246,6 +308,27 @@ async function loadCategories() {
             spellcheck="false"
           />
         </el-form-item>
+        <el-form-item label="定时">
+          <el-radio-group v-model="schedule.type">
+            <el-radio-button value="manual">手动</el-radio-button>
+            <el-radio-button value="interval">间隔</el-radio-button>
+            <el-radio-button value="daily">每天</el-radio-button>
+            <el-radio-button value="cron">Cron</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="schedule.type === 'interval'" label=" ">
+          每
+          <el-input-number v-model="schedule.interval" :min="1" :max="10080" class="mx" />
+          分钟运行一次
+        </el-form-item>
+        <el-form-item v-else-if="schedule.type === 'daily'" label=" ">
+          每天
+          <el-time-picker v-model="schedule.time" format="HH:mm" value-format="HH:mm" class="mx" />
+          运行
+        </el-form-item>
+        <el-form-item v-else-if="schedule.type === 'cron'" label=" ">
+          <el-input v-model="schedule.cron" placeholder="分 时 日 月 周，如 0 8 * * *" />
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -280,5 +363,8 @@ async function loadCategories() {
 }
 .muted {
   color: var(--app-text-secondary);
+}
+.mx {
+  margin: 0 8px;
 }
 </style>

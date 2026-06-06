@@ -1,7 +1,7 @@
 # data-nexus 当前系统架构
 
 > 本文件是**当前系统的真实快照**，随代码变更同步更新（开发规范第 8 节）。
-> 最近更新：2026-06-06　|　对应版本：**v0.13**（MySQL 支持 + 首页重做 + 用户端门户重构，dev 分支）
+> 最近更新：2026-06-06　|　对应版本：**v0.14**（定时调度 + 执行历史保留，dev 分支）
 
 ---
 
@@ -23,7 +23,7 @@
 | 层 | 选型 |
 |---|---|
 | 后端 | Django + DRF |
-| 调度 | APScheduler（单进程，后续接入） |
+| 调度 | **APScheduler（单进程，runscheduler 命令）** —— 已接入 |
 | 元数据库 | SQLite |
 | 业务数据源 | **Oracle（oracledb thin）/ MySQL（PyMySQL）** —— core/db.py 统一 |
 | Excel | openpyxl |
@@ -142,6 +142,8 @@ npm run dev      # http://localhost:5179 ，/api 自动代理到后端 8000
 ## 6. 部署
 
 - 生产：Linux（systemd / Docker，待定）；开发：本地 Windows，代码跨平台。
+- **定时调度**：另起单进程 `python manage.py runscheduler`（每 30s 同步数据集 cron/interval；须仅一个实例，见技术方案 §10.1）。
+- **执行历史保留**：每数据集保留最近 `EXECUTION_KEEP`（默认 20）次，超出连同文件自动清理。
 
 ---
 

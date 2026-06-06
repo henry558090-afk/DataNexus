@@ -18,6 +18,7 @@ env = environ.Env(
     QUERY_MAX_ROWS=(int, 100000),
     QUERY_TIMEOUT_SECONDS=(int, 60),
     QUERY_FETCH_SIZE=(int, 1000),
+    EXECUTION_KEEP=(int, 20),
 )
 environ.Env.read_env(BASE_DIR / ".env")
 
@@ -128,3 +129,5 @@ FERNET_KEY = env("FERNET_KEY", default="")
 QUERY_MAX_ROWS = env("QUERY_MAX_ROWS")
 QUERY_TIMEOUT_SECONDS = env("QUERY_TIMEOUT_SECONDS")
 QUERY_FETCH_SIZE = env("QUERY_FETCH_SIZE")
+# 每个数据集保留最近 N 次执行/文件，超出自动清理
+EXECUTION_KEEP = env("EXECUTION_KEEP")

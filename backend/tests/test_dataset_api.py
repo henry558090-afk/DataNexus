@@ -121,3 +121,15 @@ def test_download(manager, datasource, monkeypatch, settings, tmp_path):
 def test_non_manager_forbidden(db, datasource):
     user = User.objects.create_user("u", password="x")
     assert client_for(user).get("/api/datasets/").status_code == 403
+
+
+def test_execution_retention_prunes_old(manager, datasource, monkeypatch, settings, tmp_path):
+    settings.MEDIA_ROOT = str(tmp_path)
+    settings.EXECUTION_KEEP = 2
+    ds = make_dataset(datasource)
+    monkeypatch.setattr(db, "stream_query", lambda *a, **k: (["a"], iter([(1,)])))
+    client = client_for(manager)
+    for _ in range(4):
+        client.post(f"/api/datasets/{ds.id}/run/")
+    # 只保留最近 2 次
+    assert Execution.objects.filter(dataset=ds).count() == 2

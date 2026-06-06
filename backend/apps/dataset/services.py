@@ -34,6 +34,20 @@ def preview_dataset(dataset: Dataset, *, limit: int = 50) -> tuple[list[str], li
     )
 
 
+def _prune_executions(dataset: Dataset, keep: int) -> None:
+    """只保留该数据集最近 keep 次执行，超出的连同文件一起删除。"""
+    old = list(Execution.objects.filter(dataset=dataset).order_by("-started_at")[keep:])
+    for ex in old:
+        if ex.file_path:
+            p = Path(ex.file_path)
+            if p.exists():
+                try:
+                    p.unlink()
+                except OSError:
+                    pass
+        ex.delete()
+
+
 def run_dataset(dataset: Dataset, user=None) -> Execution:
     """运行数据集，生成 Excel 并记录。无论成败都返回 Execution（失败含 error_msg）。"""
     execution = Execution.objects.create(
@@ -65,6 +79,7 @@ def run_dataset(dataset: Dataset, user=None) -> Execution:
             execution.is_latest = True
             execution.ended_at = timezone.now()
             execution.save()
+        _prune_executions(dataset, settings.EXECUTION_KEEP)
     except Exception as exc:  # noqa: BLE001 - 失败信息落库，不抛 500
         execution.status = Execution.Status.FAILED
         execution.error_msg = str(exc)

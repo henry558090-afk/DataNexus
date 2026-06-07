@@ -112,10 +112,26 @@ async function removeMembership(id: number) {
 }
 
 async function addDept() {
-  if (!newDeptName.value.trim()) return
-  await createDepartment(newDeptName.value.trim())
+  let name = newDeptName.value.trim()
+  if (!name) {
+    try {
+      const { value } = await ElMessageBox.prompt('请输入部门名称', '新建部门', {
+        confirmButtonText: '创建',
+        cancelButtonText: '取消',
+      })
+      name = (value ?? '').trim()
+    } catch {
+      return
+    }
+  }
+  if (!name) {
+    ElMessage.warning('请输入部门名称')
+    return
+  }
+  await createDepartment(name)
   newDeptName.value = ''
   departments.value = (await listDepartments()).data
+  ElMessage.success('已新建部门')
 }
 async function removeDept(d: Department) {
   await ElMessageBox.confirm(`删除部门「${d.name}」？`, '提示', { type: 'warning' })

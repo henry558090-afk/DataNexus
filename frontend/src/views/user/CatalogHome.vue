@@ -343,8 +343,9 @@ onMounted(loadTree)
 /* —— Explorer 一体化容器 —— */
 .explorer {
   display: grid;
-  grid-template-columns: 264px 1fr;
-  min-height: 520px;
+  grid-template-columns: 288px 1fr;
+  height: calc(100vh - 212px);
+  min-height: 560px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);

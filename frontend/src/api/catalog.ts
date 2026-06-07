@@ -47,6 +47,12 @@ export interface FolderShare {
 export function listFolderShares(folderId: number) {
   return http.get<FolderShare[]>('/folder-shares/', { params: { folder: folderId } })
 }
+export function listSharesByUser(userId: number) {
+  return http.get<FolderShare[]>('/folder-shares/', { params: { subject_user: userId } })
+}
+export function listSharesByDept(deptId: number) {
+  return http.get<FolderShare[]>('/folder-shares/', { params: { subject_department: deptId } })
+}
 export function createFolderShare(data: {
   folder: number
   subject_department?: number

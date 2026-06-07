@@ -39,6 +39,8 @@ SECRET_KEY=$SECRET
 DEBUG=False
 ALLOWED_HOSTS=*
 CORS_ALLOWED_ORIGINS=
+# 域名 + HTTPS（走反向代理）时必填，否则后台登录会 CSRF 403。例：https://data.corp.com
+CSRF_TRUSTED_ORIGINS=
 
 # ⚠️ 加密数据源密码的钥匙，务必【单独备份】！丢失则已存数据源密码全部解不开
 FERNET_KEY=$FERNET

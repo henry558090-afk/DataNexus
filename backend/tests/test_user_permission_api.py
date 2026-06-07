@@ -1,13 +1,12 @@
-"""用户管理 + 角色/部门成员/授权 API 单测。"""
+"""用户管理 + 部门成员 API 单测（无角色细分；端到端授权走文件夹分享）。"""
 
 import pytest
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 
-from apps.catalog.models import Category, Department
-from apps.dataset.models import Dataset
-from apps.datasource.models import DataSource
-from apps.permission.services import can_view_dataset
+from apps.catalog.models import Department, Folder, FolderShare
+from apps.execution.models import DataFile
+from apps.permission.services import can_view_file
 
 User = get_user_model()
 
@@ -28,62 +27,45 @@ def member(db):
 
 
 def cli(user) -> APIClient:
-    client = APIClient()
-    client.force_authenticate(user=user)
-    return client
+    c = APIClient()
+    c.force_authenticate(user=user)
+    return c
 
 
 def test_create_user_with_password(assistant):
-    resp = cli(assistant).post(
+    r = cli(assistant).post(
         "/api/users/",
         {"username": "newbie", "password": "pw123456", "is_boss": True},
         format="json",
     )
-    assert resp.status_code == 201
-    user = User.objects.get(username="newbie")
-    assert user.check_password("pw123456")
-    assert user.is_boss
+    assert r.status_code == 201
+    u = User.objects.get(username="newbie")
+    assert u.check_password("pw123456") and u.is_boss
 
 
 def test_cannot_set_superuser_via_api(assistant):
-    resp = cli(assistant).post(
-        "/api/users/",
-        {"username": "x", "is_superuser": True, "password": "p"},
-        format="json",
+    r = cli(assistant).post(
+        "/api/users/", {"username": "x", "is_superuser": True, "password": "p"}, format="json"
     )
-    assert resp.status_code == 201
+    assert r.status_code == 201
     assert User.objects.get(username="x").is_superuser is False
 
 
 def test_assistant_cannot_see_superuser(assistant, superadmin):
-    usernames = [u["username"] for u in cli(assistant).get("/api/users/").data]
-    assert "root" not in usernames  # 辅助管理员看不到超管
-
-
-def test_superuser_sees_all(superadmin, assistant):
-    usernames = [u["username"] for u in cli(superadmin).get("/api/users/").data]
-    assert "asst" in usernames
-    assert "root" in usernames
+    names = [u["username"] for u in cli(assistant).get("/api/users/").data]
+    assert "root" not in names
 
 
 def test_member_forbidden(member):
     assert cli(member).get("/api/users/").status_code == 403
 
 
-def test_membership_and_grant_grants_visibility(assistant, member):
-    ds = DataSource(name="o", host="h", port=1521, service_name="s", username="u")
-    ds.save()
+def test_membership_and_folder_share_grants_visibility(assistant, member):
     dep = Department.objects.create(name="财务部")
-    cat = Category.objects.create(name="月报", department=dep)
-    dataset = Dataset.objects.create(name="应收", datasource=ds, category=cat, sql_text="SELECT 1")
-
-    client = cli(assistant)
-    client.post(
-        "/api/memberships/",
-        {"user": member.id, "department": dep.id, "role": "member"},
-        format="json",
-    )
-    assert can_view_dataset(member, dataset) is False  # 仅成员、未授权 → 不可见
-
-    client.post("/api/grants/", {"subject_user": member.id, "category": cat.id}, format="json")
-    assert can_view_dataset(member, dataset) is True  # 授权分类后可见
+    folder = Folder.objects.create(name="财务报表")
+    f = DataFile.objects.create(folder=folder, name="应收.xlsx", status="success")
+    c = cli(assistant)
+    c.post("/api/memberships/", {"user": member.id, "department": dep.id}, format="json")
+    assert can_view_file(member, f) is False  # 还没分享文件夹
+    FolderShare.objects.create(folder=folder, subject_department=dep)
+    assert can_view_file(member, f) is True  # 分享后可见

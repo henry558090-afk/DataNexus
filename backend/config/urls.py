@@ -14,27 +14,27 @@ from apps.accounts.permissions import IsManager
 from apps.accounts.views import LoginView, UserViewSet
 from apps.audit.views import AuditLogViewSet
 from apps.catalog import portal
-from apps.catalog.views import CategoryViewSet, DepartmentViewSet
+from apps.catalog.views import DepartmentViewSet, FolderShareViewSet, FolderViewSet
 from apps.dataset.views import DatasetViewSet
 from apps.datasource.views import DataSourceViewSet
-from apps.execution.views import ExecutionViewSet
-from apps.permission.views import GrantViewSet, MembershipViewSet
+from apps.execution.views import DataFileViewSet
+from apps.permission.views import MembershipViewSet
 
 router = DefaultRouter()
 router.register("datasources", DataSourceViewSet, basename="datasource")
 router.register("datasets", DatasetViewSet, basename="dataset")
-router.register("executions", ExecutionViewSet, basename="execution")
+router.register("datafiles", DataFileViewSet, basename="datafile")
 router.register("departments", DepartmentViewSet, basename="department")
-router.register("categories", CategoryViewSet, basename="category")
+router.register("folders", FolderViewSet, basename="folder")
+router.register("folder-shares", FolderShareViewSet, basename="folder-share")
 router.register("users", UserViewSet, basename="user")
 router.register("memberships", MembershipViewSet, basename="membership")
-router.register("grants", GrantViewSet, basename="grant")
 router.register("audit-logs", AuditLogViewSet, basename="audit-log")
 
 
 def health(_request: HttpRequest) -> JsonResponse:
     """健康检查，便于确认服务可用。"""
-    return JsonResponse({"status": "ok", "service": "data-nexus", "version": "v0.16"})
+    return JsonResponse({"status": "ok", "service": "data-nexus", "version": "v0.17"})
 
 
 def spa(_request: HttpRequest):
@@ -53,15 +53,15 @@ def stats(_request: Request) -> Response:
 
     from apps.dataset.models import Dataset
     from apps.datasource.models import DataSource
-    from apps.execution.models import Execution
+    from apps.execution.models import DataFile
 
     today = timezone.localdate()
     return Response(
         {
             "datasources": DataSource.objects.count(),
             "datasets": Dataset.objects.count(),
-            "executions": Execution.objects.count(),
-            "today_runs": Execution.objects.filter(started_at__date=today).count(),
+            "files": DataFile.objects.count(),
+            "today_runs": DataFile.objects.filter(created_at__date=today).count(),
         }
     )
 
@@ -92,10 +92,11 @@ urlpatterns = [
     path("api/", include(router.urls)),  # /api/datasources/ ...
     # 用户端数据门户（按可见性）
     path("api/portal/tree/", portal.portal_tree, name="portal-tree"),
-    path("api/portal/datasets/<int:pk>/", portal.portal_dataset_detail, name="portal-dataset"),
     path(
-        "api/portal/executions/<int:pk>/download/", portal.portal_download, name="portal-download"
+        "api/portal/folders/<int:pk>/files/", portal.portal_folder_files, name="portal-folder-files"
     ),
+    path("api/portal/search/", portal.portal_search, name="portal-search"),
+    path("api/portal/files/<int:pk>/download/", portal.portal_download, name="portal-download"),
     # 前端单页：放最后，排除 api/django-admin/static/media（/admin/* 留给前端）
     re_path(r"^(?!api/|django-admin/|static/|media/).*$", spa, name="spa"),
 ]

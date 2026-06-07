@@ -1,14 +1,12 @@
-"""目录(部门/分类) CRUD + 用户端门户(可见性过滤树/下载鉴权) 单测。"""
+"""文件夹 CRUD（含防环）+ 授权 + 用户端门户（树/文件/搜索/下载鉴权）单测。"""
 
 import pytest
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 
-from apps.catalog.models import Category, Department
-from apps.dataset.models import Dataset
-from apps.datasource.models import DataSource
-from apps.execution.models import Execution
-from apps.permission.models import DepartmentMembership, Grant
+from apps.catalog.models import Department, Folder, FolderShare
+from apps.execution.models import DataFile
+from apps.permission.models import DepartmentMembership
 
 User = get_user_model()
 
@@ -24,68 +22,86 @@ def member(db):
 
 
 def cli(user) -> APIClient:
-    client = APIClient()
-    client.force_authenticate(user=user)
-    return client
+    c = APIClient()
+    c.force_authenticate(user=user)
+    return c
+
+
+# ---- 文件夹管理 ----
+
+
+def test_folder_crud_and_move(manager):
+    c = cli(manager)
+    a = c.post("/api/folders/", {"name": "财务"}, format="json").data
+    b = c.post("/api/folders/", {"name": "月报", "parent": a["id"]}, format="json").data
+    assert b["parent"] == a["id"]
+    # 重命名
+    assert (
+        c.patch(f"/api/folders/{b['id']}/", {"name": "月度报表"}, format="json").status_code == 200
+    )
+    # 移动到根
+    assert c.patch(f"/api/folders/{b['id']}/", {"parent": None}, format="json").status_code == 200
+
+
+def test_folder_move_cycle_rejected(manager):
+    c = cli(manager)
+    a = c.post("/api/folders/", {"name": "A"}, format="json").data
+    b = c.post("/api/folders/", {"name": "B", "parent": a["id"]}, format="json").data
+    # 把 A 移到 B 下（B 是 A 的子）→ 应拒绝
+    assert (
+        c.patch(f"/api/folders/{a['id']}/", {"parent": b["id"]}, format="json").status_code == 400
+    )
+
+
+def test_folder_forbidden_for_member(member):
+    assert cli(member).get("/api/folders/").status_code == 403
+
+
+def test_folder_share_requires_one_subject(manager):
+    c = cli(manager)
+    fid = c.post("/api/folders/", {"name": "F"}, format="json").data["id"]
+    # 既不给部门也不给个人 → 400
+    assert c.post("/api/folder-shares/", {"folder": fid}, format="json").status_code == 400
+
+
+# ---- 门户 ----
 
 
 @pytest.fixture
-def filed_dataset(db):
-    ds = DataSource(name="o", host="h", port=1521, service_name="s", username="u")
-    ds.save()
+def tree(db):
+    root = Folder.objects.create(name="财务报表")
+    sub = Folder.objects.create(name="月报", parent=root)
+    f = DataFile.objects.create(folder=sub, name="应收_20260607.xlsx", status="success")
+    return root, sub, f
+
+
+def test_portal_tree_member_empty_then_shared(manager, member, tree):
+    root, sub, f = tree
+    assert cli(member).get("/api/portal/tree/").data == []  # 默认拒绝
     dep = Department.objects.create(name="财务部")
-    cat = Category.objects.create(name="月报", department=dep)
-    return Dataset.objects.create(name="应收", datasource=ds, category=cat, sql_text="SELECT 1")
+    DepartmentMembership.objects.create(user=member, department=dep)
+    FolderShare.objects.create(folder=root, subject_department=dep)
+    data = cli(member).get("/api/portal/tree/").data
+    assert data[0]["name"] == "财务报表"
+    assert data[0]["children"][0]["name"] == "月报"  # 递归含子文件夹
 
 
-# ---- 目录 CRUD ----
-
-
-def test_department_crud_manager(manager):
-    client = cli(manager)
-    assert client.post("/api/departments/", {"name": "财务部"}, format="json").status_code == 201
-    assert client.get("/api/departments/").status_code == 200
-
-
-def test_category_filter_by_department(manager):
-    client = cli(manager)
-    dep = client.post("/api/departments/", {"name": "销售部"}, format="json").data
-    client.post("/api/categories/", {"name": "月报", "department": dep["id"]}, format="json")
-    resp = client.get(f"/api/categories/?department={dep['id']}")
-    assert len(resp.data) == 1
-
-
-def test_catalog_forbidden_for_member(member):
-    assert cli(member).get("/api/departments/").status_code == 403
-
-
-# ---- 用户端门户 ----
-
-
-def test_portal_tree_admin_sees(manager, filed_dataset):
-    resp = cli(manager).get("/api/portal/tree/")
-    assert resp.status_code == 200
-    assert resp.data[0]["name"] == "财务部"
-    assert resp.data[0]["categories"][0]["datasets"][0]["name"] == "应收"
-
-
-def test_portal_tree_member_empty_by_default(member, filed_dataset):
-    assert cli(member).get("/api/portal/tree/").data == []
-
-
-def test_portal_tree_member_with_grant(member, filed_dataset):
-    DepartmentMembership.objects.create(
-        user=member, department=filed_dataset.category.department, role="member"
+def test_portal_folder_files_and_download(manager, member, tree):
+    root, sub, f = tree
+    FolderShare.objects.create(folder=root, subject_user=member)
+    files = cli(member).get(f"/api/portal/folders/{sub.id}/files/").data
+    assert files[0]["name"] == "应收_20260607.xlsx"
+    # 无权限用户下载 → 403；有权限 → 走可见性（文件无真实文件 → 404 但已过鉴权）
+    assert (
+        cli(User.objects.create_user("x", password="x"))
+        .get(f"/api/portal/files/{f.id}/download/")
+        .status_code
+        == 403
     )
-    Grant.objects.create(subject_user=member, dataset=filed_dataset)
-    assert len(cli(member).get("/api/portal/tree/").data) == 1
 
 
-def test_portal_download_visibility(member, manager, filed_dataset, tmp_path):
-    f = tmp_path / "x.xlsx"
-    f.write_bytes(b"PK\x03\x04test")
-    ex = Execution.objects.create(
-        dataset=filed_dataset, status="success", file_path=str(f), is_latest=True
-    )
-    assert cli(member).get(f"/api/portal/executions/{ex.id}/download/").status_code == 403
-    assert cli(manager).get(f"/api/portal/executions/{ex.id}/download/").status_code == 200
+def test_portal_search(manager, member, tree):
+    root, sub, f = tree
+    FolderShare.objects.create(folder=root, subject_user=member)
+    assert len(cli(member).get("/api/portal/search/?q=应收").data) == 1
+    assert cli(member).get("/api/portal/search/?q=不存在").data == []

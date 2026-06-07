@@ -1,4 +1,4 @@
-"""可见性判定单元测试（权限核心，覆盖各角色）。"""
+"""文件夹可见性判定单测（递归 + 部门/个人授权，默认拒绝）。"""
 
 from types import SimpleNamespace
 
@@ -6,137 +6,65 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 
-from apps.catalog.models import Category, Department
-from apps.dataset.models import Dataset
-from apps.datasource.models import DataSource
-from apps.permission.models import DepartmentMembership, Grant
-from apps.permission.services import can_view_dataset
+from apps.catalog.models import Department, Folder, FolderShare
+from apps.execution.models import DataFile
+from apps.permission.models import DepartmentMembership
+from apps.permission.services import can_view_file, can_view_folder, visible_folders
 
 User = get_user_model()
 
 
-def make_user(username: str, **flags) -> "User":
-    return User.objects.create_user(username=username, password="x", **flags)
+def mk(username: str, **flags):
+    return User.objects.create_user(username, password="x", **flags)
 
 
 @pytest.fixture
 def world(db):
-    """两个部门、各一分类一数据集，共享一个数据源。"""
-    ds = DataSource.objects.create(
-        name="oracle1", host="h", port=1521, service_name="s", username="u", password_encrypted=""
-    )
     fin = Department.objects.create(name="财务部")
-    sales = Department.objects.create(name="销售部")
-    fin_cat = Category.objects.create(name="月度报表", department=fin)
-    sales_cat = Category.objects.create(name="业绩", department=sales)
-    fin_ds = Dataset.objects.create(
-        name="应收明细", category=fin_cat, datasource=ds, sql_text="SELECT 1"
-    )
-    sales_ds = Dataset.objects.create(
-        name="销售汇总", category=sales_cat, datasource=ds, sql_text="SELECT 1"
-    )
-    return SimpleNamespace(fin=fin, sales=sales, fin_cat=fin_cat, fin_ds=fin_ds, sales_ds=sales_ds)
-
-
-# ---- 全局可见角色 ----
+    root = Folder.objects.create(name="财务报表")
+    sub = Folder.objects.create(name="月报", parent=root)
+    f = DataFile.objects.create(folder=sub, name="应收_20260607.xlsx", status="success")
+    other = Folder.objects.create(name="销售")
+    of = DataFile.objects.create(folder=other, name="销售.xlsx", status="success")
+    return SimpleNamespace(fin=fin, root=root, sub=sub, f=f, other=other, of=of)
 
 
 def test_superuser_sees_all(world):
     u = User.objects.create_superuser("root", "r@x.com", "x")
-    assert can_view_dataset(u, world.fin_ds)
-    assert can_view_dataset(u, world.sales_ds)
-
-
-def test_assistant_admin_sees_all(world):
-    u = make_user("aa", is_assistant_admin=True)
-    assert can_view_dataset(u, world.fin_ds)
-    assert can_view_dataset(u, world.sales_ds)
+    assert can_view_file(u, world.f) and can_view_file(u, world.of)
 
 
 def test_boss_sees_all(world):
-    u = make_user("boss", is_boss=True)
-    assert can_view_dataset(u, world.fin_ds)
+    assert can_view_file(mk("boss", is_boss=True), world.f)
 
 
-# ---- 部门内角色 ----
+def test_default_deny(world):
+    assert can_view_file(mk("m0"), world.f) is False
 
 
-def test_director_sees_dept_only(world):
-    u = make_user("dir")
-    DepartmentMembership.objects.create(user=u, department=world.fin, role="director")
-    assert can_view_dataset(u, world.fin_ds)
-    assert not can_view_dataset(u, world.sales_ds)
+def test_share_to_department_recursive(world):
+    u = mk("m1")
+    DepartmentMembership.objects.create(user=u, department=world.fin)
+    FolderShare.objects.create(folder=world.root, subject_department=world.fin)
+    assert can_view_file(u, world.f) is True  # 子文件夹里的文件也可见（递归）
+    assert can_view_folder(u, world.sub) is True
+    assert can_view_file(u, world.of) is False  # 未授权的文件夹不可见
 
 
-def test_manager_sees_dept(world):
-    u = make_user("mgr")
-    DepartmentMembership.objects.create(user=u, department=world.fin, role="manager")
-    assert can_view_dataset(u, world.fin_ds)
-    assert not can_view_dataset(u, world.sales_ds)
+def test_share_to_person(world):
+    u = mk("m2")
+    FolderShare.objects.create(folder=world.sub, subject_user=u)
+    assert can_view_file(u, world.f) is True
 
 
-def test_member_default_denied(world):
-    u = make_user("m")
-    DepartmentMembership.objects.create(user=u, department=world.fin, role="member")
-    assert not can_view_dataset(u, world.fin_ds)
-
-
-def test_member_see_all_in_dept(world):
-    u = make_user("m2")
-    DepartmentMembership.objects.create(
-        user=u, department=world.fin, role="member", see_all_in_dept=True
-    )
-    assert can_view_dataset(u, world.fin_ds)
-    assert not can_view_dataset(u, world.sales_ds)
-
-
-# ---- 成员授权 ----
-
-
-def test_member_individual_grant_dataset(world):
-    u = make_user("m3")
-    DepartmentMembership.objects.create(user=u, department=world.fin, role="member")
-    Grant.objects.create(subject_user=u, dataset=world.fin_ds)
-    assert can_view_dataset(u, world.fin_ds)
-
-
-def test_member_individual_grant_category(world):
-    u = make_user("m4")
-    DepartmentMembership.objects.create(user=u, department=world.fin, role="member")
-    Grant.objects.create(subject_user=u, category=world.fin_cat)
-    assert can_view_dataset(u, world.fin_ds)
-
-
-def test_member_role_group_grant(world):
-    u = make_user("m5")
-    DepartmentMembership.objects.create(user=u, department=world.fin, role="member")
-    Grant.objects.create(
-        subject_department=world.fin, subject_role="member", category=world.fin_cat
-    )
-    assert can_view_dataset(u, world.fin_ds)
+def test_visible_folders_includes_descendants(world):
+    u = mk("m3")
+    DepartmentMembership.objects.create(user=u, department=world.fin)
+    FolderShare.objects.create(folder=world.root, subject_department=world.fin)
+    ids = set(visible_folders(u).values_list("id", flat=True))
+    assert world.root.id in ids and world.sub.id in ids
+    assert world.other.id not in ids
 
 
 def test_unauthenticated_denied(world):
-    assert not can_view_dataset(AnonymousUser(), world.fin_ds)
-
-
-# ---- 无分类（草稿）数据集：修复 A 回归 ----
-
-
-def _unfiled_dataset(name: str) -> Dataset:
-    ds = DataSource(name=name + "_src", host="h", port=1521, service_name="s", username="u")
-    ds.save()
-    return Dataset.objects.create(name=name, datasource=ds, sql_text="SELECT 1", category=None)
-
-
-def test_null_category_denied_for_non_admin(db):
-    unfiled = _unfiled_dataset("未归类A")
-    user = make_user("nc1")
-    # 不应抛 AttributeError，且普通用户不可见
-    assert can_view_dataset(user, unfiled) is False
-
-
-def test_null_category_visible_for_admin(db):
-    unfiled = _unfiled_dataset("未归类B")
-    admin = User.objects.create_superuser("rootnc", "r@x.com", "x")
-    assert can_view_dataset(admin, unfiled) is True
+    assert can_view_file(AnonymousUser(), world.f) is False

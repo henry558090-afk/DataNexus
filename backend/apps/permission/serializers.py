@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from apps.permission.models import DepartmentMembership, Grant
+from apps.permission.models import DepartmentMembership
 
 
 class MembershipSerializer(serializers.ModelSerializer):
@@ -9,27 +9,4 @@ class MembershipSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DepartmentMembership
-        fields = [
-            "id",
-            "user",
-            "username",
-            "department",
-            "department_name",
-            "role",
-            "see_all_in_dept",
-        ]
-
-
-class GrantSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Grant
-        fields = [
-            "id",
-            "subject_user",
-            "subject_department",
-            "subject_role",
-            "category",
-            "dataset",
-            "created_at",
-        ]
-        read_only_fields = ["id", "created_at"]
+        fields = ["id", "user", "username", "department", "department_name"]

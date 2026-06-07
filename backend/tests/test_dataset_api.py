@@ -1,4 +1,4 @@
-"""数据集 + 执行 API 单测：SQL 校验、运行生成 Excel(mock)、最新版本、失败记录、下载、权限。"""
+"""数据集（SQL任务）+ 数据文件 API 单测：SQL校验、运行新增文件、命名、保留、下载、权限。"""
 
 from pathlib import Path
 
@@ -6,9 +6,10 @@ import pytest
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 
+from apps.catalog.models import Folder
 from apps.dataset.models import Dataset
 from apps.datasource.models import DataSource
-from apps.execution.models import Execution
+from apps.execution.models import DataFile
 from core import db
 
 User = get_user_model()
@@ -27,71 +28,53 @@ def datasource(db):
     return ds
 
 
-def client_for(user) -> APIClient:
-    client = APIClient()
-    client.force_authenticate(user=user)
-    return client
+def cli(user) -> APIClient:
+    c = APIClient()
+    c.force_authenticate(user=user)
+    return c
 
 
-def make_dataset(datasource) -> Dataset:
+def make_dataset(datasource, **kw) -> Dataset:
+    folder = Folder.objects.create(name="月报")
     return Dataset.objects.create(
-        name="明细表", datasource=datasource, sql_text="SELECT 1 FROM dual"
+        name="应收明细",
+        datasource=datasource,
+        sql_text="SELECT 1 FROM dual",
+        target_folder=folder,
+        **kw,
     )
 
 
 def test_create_rejects_non_select(manager, datasource):
-    resp = client_for(manager).post(
+    r = cli(manager).post(
         "/api/datasets/",
-        {"name": "d1", "datasource": datasource.id, "sql_text": "DELETE FROM t"},
+        {"name": "d", "datasource": datasource.id, "sql_text": "DELETE FROM t"},
         format="json",
     )
-    assert resp.status_code == 400
+    assert r.status_code == 400
 
 
 def test_create_ok_sets_owner(manager, datasource):
-    resp = client_for(manager).post(
+    r = cli(manager).post(
         "/api/datasets/",
-        {"name": "d1", "datasource": datasource.id, "sql_text": "SELECT 1 FROM dual"},
+        {"name": "d", "datasource": datasource.id, "sql_text": "SELECT 1 FROM dual"},
         format="json",
     )
-    assert resp.status_code == 201
-    assert resp.data["owner"] == manager.id
+    assert r.status_code == 201
+    assert r.data["owner"] == manager.id
 
 
-def test_preview(manager, datasource, monkeypatch):
-    ds = make_dataset(datasource)
-    monkeypatch.setattr(db, "preview_query", lambda *a, **k: (["a", "b"], [(1, 2)]))
-    resp = client_for(manager).post(f"/api/datasets/{ds.id}/preview/")
-    assert resp.data["ok"] is True
-    assert resp.data["columns"] == ["a", "b"]
-
-
-def test_run_generates_excel(manager, datasource, monkeypatch, settings, tmp_path):
+def test_run_creates_named_file_in_folder(manager, datasource, monkeypatch, settings, tmp_path):
     settings.MEDIA_ROOT = str(tmp_path)
-    ds = make_dataset(datasource)
-
-    def fake_stream(params, sql, **kwargs):
-        return ["a", "b"], iter([(1, 2), (3, 4)])
-
-    monkeypatch.setattr(db, "stream_query", fake_stream)
-    resp = client_for(manager).post(f"/api/datasets/{ds.id}/run/")
-    assert resp.status_code == 200
-    assert resp.data["status"] == "success"
-    assert resp.data["row_count"] == 2
-    ex = Execution.objects.get(id=resp.data["id"])
-    assert ex.is_latest
-    assert Path(ex.file_path).exists()
-
-
-def test_run_marks_only_latest(manager, datasource, monkeypatch, settings, tmp_path):
-    settings.MEDIA_ROOT = str(tmp_path)
-    ds = make_dataset(datasource)
-    monkeypatch.setattr(db, "stream_query", lambda *a, **k: (["a"], iter([(1,)])))
-    client = client_for(manager)
-    e1 = client.post(f"/api/datasets/{ds.id}/run/").data["id"]
-    e2 = client.post(f"/api/datasets/{ds.id}/run/").data["id"]
-    assert Execution.objects.get(id=e1).is_latest is False
-    assert Execution.objects.get(id=e2).is_latest is True
+    ds = make_dataset(datasource, file_prefix="应收明细", date_format="%Y%m%d")
+    monkeypatch.setattr(db, "stream_query", lambda *a, **k: (["a", "b"], iter([(1, 2)])))
+    r = cli(manager).post(f"/api/datasets/{ds.id}/run/")
+    assert r.data["status"] == "success"
+    assert r.data["row_count"] == 1
+    f = DataFile.objects.get(id=r.data["id"])
+    assert f.folder_id == ds.target_folder_id
+    assert f.name.startswith("应收明细_") and f.name.endswith(".xlsx")
+    assert Path(f.file_path).exists()
 
 
 def test_run_failure_records_error(manager, datasource, monkeypatch, settings, tmp_path):
@@ -99,37 +82,32 @@ def test_run_failure_records_error(manager, datasource, monkeypatch, settings, t
     ds = make_dataset(datasource)
 
     def boom(*a, **k):
-        raise RuntimeError("ORA-00942 table not found")
+        raise RuntimeError("ORA-00942")
 
     monkeypatch.setattr(db, "stream_query", boom)
-    resp = client_for(manager).post(f"/api/datasets/{ds.id}/run/")
-    assert resp.data["status"] == "failed"
-    assert "ORA-00942" in resp.data["error_msg"]
+    r = cli(manager).post(f"/api/datasets/{ds.id}/run/")
+    assert r.data["status"] == "failed" and "ORA-00942" in r.data["error_msg"]
 
 
-def test_download(manager, datasource, monkeypatch, settings, tmp_path):
+def test_retention_keep_count(manager, datasource, monkeypatch, settings, tmp_path):
+    settings.MEDIA_ROOT = str(tmp_path)
+    ds = make_dataset(datasource, keep_count=2)
+    monkeypatch.setattr(db, "stream_query", lambda *a, **k: (["a"], iter([(1,)])))
+    c = cli(manager)
+    for _ in range(4):
+        c.post(f"/api/datasets/{ds.id}/run/")
+    assert DataFile.objects.filter(dataset=ds).count() == 2
+
+
+def test_datafile_download(manager, datasource, monkeypatch, settings, tmp_path):
     settings.MEDIA_ROOT = str(tmp_path)
     ds = make_dataset(datasource)
     monkeypatch.setattr(db, "stream_query", lambda *a, **k: (["a"], iter([(1,)])))
-    client = client_for(manager)
-    eid = client.post(f"/api/datasets/{ds.id}/run/").data["id"]
-    resp = client.get(f"/api/executions/{eid}/download/")
-    assert resp.status_code == 200
-    assert "attachment" in resp["Content-Disposition"]
+    fid = cli(manager).post(f"/api/datasets/{ds.id}/run/").data["id"]
+    r = cli(manager).get(f"/api/datafiles/{fid}/download/")
+    assert r.status_code == 200 and "attachment" in r["Content-Disposition"]
 
 
 def test_non_manager_forbidden(db, datasource):
-    user = User.objects.create_user("u", password="x")
-    assert client_for(user).get("/api/datasets/").status_code == 403
-
-
-def test_execution_retention_prunes_old(manager, datasource, monkeypatch, settings, tmp_path):
-    settings.MEDIA_ROOT = str(tmp_path)
-    settings.EXECUTION_KEEP = 2
-    ds = make_dataset(datasource)
-    monkeypatch.setattr(db, "stream_query", lambda *a, **k: (["a"], iter([(1,)])))
-    client = client_for(manager)
-    for _ in range(4):
-        client.post(f"/api/datasets/{ds.id}/run/")
-    # 只保留最近 2 次
-    assert Execution.objects.filter(dataset=ds).count() == 2
+    u = User.objects.create_user("u", password="x")
+    assert cli(u).get("/api/datasets/").status_code == 403

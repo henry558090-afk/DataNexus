@@ -38,7 +38,7 @@ const routes: RouteRecordRaw[] = [
         path: 'folders',
         name: 'admin-folders',
         component: () => import('@/views/admin/FolderView.vue'),
-        meta: { title: '文件夹' },
+        meta: { title: '目录管理' },
       },
       {
         path: 'files',
@@ -50,7 +50,19 @@ const routes: RouteRecordRaw[] = [
         path: 'permission',
         name: 'admin-permission',
         component: () => import('@/views/admin/PermissionView.vue'),
-        meta: { title: '用户与部门' },
+        meta: { title: '权限管理' },
+      },
+      {
+        path: 'departments',
+        name: 'admin-departments',
+        component: () => import('@/views/admin/DepartmentView.vue'),
+        meta: { title: '部门管理' },
+      },
+      {
+        path: 'users',
+        name: 'admin-users',
+        component: () => import('@/views/admin/UserView.vue'),
+        meta: { title: '人员管理' },
       },
       {
         path: 'audit',

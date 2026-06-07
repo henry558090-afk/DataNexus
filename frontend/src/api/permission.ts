@@ -41,6 +41,9 @@ export interface Membership {
 export function listMemberships(userId: number) {
   return http.get<Membership[]>('/memberships/', { params: { user: userId } })
 }
+export function listMembershipsByDept(deptId: number) {
+  return http.get<Membership[]>('/memberships/', { params: { department: deptId } })
+}
 export function createMembership(data: { user: number; department: number }) {
   return http.post<Membership>('/memberships/', data)
 }

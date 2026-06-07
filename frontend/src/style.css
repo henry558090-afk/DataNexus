@@ -1,26 +1,63 @@
-/* ============ data-nexus 全局样式 · 浅色系设计令牌 ============ */
+/* ============================================================
+   data-nexus 全局设计系统 · 浅色系（Restrained）
+   令牌决策见 DESIGN.md。一套字体 + 一个靛蓝强调色 + 冷调中性。
+   ============================================================ */
 :root {
-  /* 覆盖 Element Plus 主色为更耐看的靛蓝 */
-  --el-color-primary: #4f6ef7;
-  --el-color-primary-light-3: #8294fa;
-  --el-color-primary-light-5: #a7b4fb;
-  --el-color-primary-light-7: #ccd4fd;
-  --el-color-primary-light-8: #dde3fe;
-  --el-color-primary-light-9: #eef1fe;
-  --el-color-primary-dark-2: #3f58c5;
-
-  /* 全局圆角更柔和 */
+  /* —— Element Plus 主色（靛蓝，白字对比 ~5:1）—— */
+  --el-color-primary: #4b5bd6;
+  --el-color-primary-light-3: #7986e1;
+  --el-color-primary-light-5: #a5adeb;
+  --el-color-primary-light-7: #d2d6f5;
+  --el-color-primary-light-8: #e4e7f9;
+  --el-color-primary-light-9: #f1f2fc;
+  --el-color-primary-dark-2: #3c49ab;
   --el-border-radius-base: 10px;
 
-  /* 应用层令牌 */
-  --app-bg: #f4f6fb;
-  --app-surface: #ffffff;
-  --app-border: #eceff5;
-  --app-text: #1d2433;
-  --app-text-secondary: #8a93a6;
-  --app-radius: 14px;
-  --app-shadow: 0 1px 2px rgba(29, 36, 51, 0.04), 0 8px 24px rgba(29, 36, 51, 0.06);
-  --app-shadow-sm: 0 1px 2px rgba(29, 36, 51, 0.05);
+  /* —— 表面与中性 —— */
+  --bg: #f5f7fb;
+  --surface: #ffffff;
+  --surface-2: #f9fafd; /* 第二中性层：侧栏/工具栏/面板 */
+  --border: #e9edf4;
+  --border-strong: #d8deea;
+
+  /* —— 墨色阶（对白均达 AA）—— */
+  --ink: #1a1f2b;
+  --ink-2: #565f70;
+  --ink-3: #8a93a4;
+
+  /* —— 强调与语义 —— */
+  --accent: #4b5bd6;
+  --accent-hover: #3f4ec2;
+  --accent-weak: #eef0fc;
+  --success: #16a34a;
+  --danger: #dc2626;
+  --warning: #d97706;
+
+  /* —— 圆角 —— */
+  --r-sm: 8px;
+  --r: 12px;
+  --r-lg: 16px;
+  --r-full: 999px;
+
+  /* —— 阴影（tint 到墨色，非纯黑）—— */
+  --shadow-sm: 0 1px 2px rgba(26, 31, 43, 0.06);
+  --shadow: 0 1px 2px rgba(26, 31, 43, 0.04), 0 6px 18px rgba(26, 31, 43, 0.07);
+  --shadow-lg: 0 2px 6px rgba(26, 31, 43, 0.06), 0 18px 48px rgba(26, 31, 43, 0.12);
+
+  /* —— 动效 —— */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 140ms;
+  --dur: 200ms;
+
+  /* —— 兼容旧令牌名（逐步淘汰）—— */
+  --app-bg: var(--bg);
+  --app-surface: var(--surface);
+  --app-border: var(--border);
+  --app-text: var(--ink);
+  --app-text-secondary: var(--ink-2);
+  --app-radius: var(--r);
+  --app-shadow: var(--shadow);
+  --app-shadow-sm: var(--shadow-sm);
 }
 
 html,
@@ -35,30 +72,93 @@ body {
   font-family:
     'Inter', system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei',
     Arial, sans-serif;
-  color: var(--app-text);
-  background: var(--app-bg);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink);
+  background: var(--bg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 h1,
 h2,
-h3 {
-  color: var(--app-text);
+h3,
+h4 {
+  color: var(--ink);
+  letter-spacing: -0.011em;
 }
 
-/* 更精致的滚动条 */
+/* —— 可见焦点环（可达性）—— */
+:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* —— 精致滚动条 —— */
 *::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
 }
 *::-webkit-scrollbar-thumb {
-  background: #d6dbe6;
-  border-radius: 8px;
+  background: #d3d9e4;
+  border-radius: var(--r-full);
+  border: 2px solid transparent;
+  background-clip: content-box;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: #c2c9d6;
+  background: #bcc4d2;
+  background-clip: content-box;
 }
 *::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* —— 骨架屏 —— */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: #eef1f6;
+  border-radius: var(--r-sm);
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65) 50%, transparent);
+  animation: skeleton-shimmer 1.3s var(--ease-out) infinite;
+}
+@keyframes skeleton-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* —— 列表进入（轻微 stagger，由组件加 style 延迟）—— */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.rise-in {
+  animation: rise-in var(--dur) var(--ease-out) both;
+}
+
+/* —— 尊重 reduced-motion —— */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

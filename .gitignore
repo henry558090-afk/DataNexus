@@ -28,6 +28,9 @@ npm-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# ===== 第三方 skill（本地用，不入库；团队共享再单独决定）=====
+/.claude/skills/
+
 # ===== IDE / OS =====
 .idea/
 .vscode/

@@ -1,311 +1,315 @@
 <script setup lang="ts">
-import { Delete, Key, OfficeBuilding, Plus, User as UserIcon } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { onMounted, reactive, ref } from 'vue'
+import { Folder, FolderOpened, OfficeBuilding, User as UserIcon } from '@element-plus/icons-vue'
+import type { ElTree } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { onMounted, ref } from 'vue'
 
-import { type Department, createDepartment, deleteDepartment, listDepartments } from '@/api/catalog'
 import {
-  type Membership,
-  type PlatformUser,
-  createMembership,
-  createUser,
-  deleteMembership,
-  deleteUser,
-  listMemberships,
-  listUsers,
-  updateUser,
-} from '@/api/permission'
+  type Department,
+  type Folder as FolderModel,
+  createFolderShare,
+  deleteFolderShare,
+  listDepartments,
+  listFolders,
+  listSharesByDept,
+  listSharesByUser,
+} from '@/api/catalog'
+import { type PlatformUser, listUsers } from '@/api/permission'
 import PageContainer from '@/components/PageContainer.vue'
 
-const users = ref<PlatformUser[]>([])
+interface TreeNode {
+  id: number
+  name: string
+  parent: number | null
+  children: TreeNode[]
+}
+interface Subject {
+  type: 'dept' | 'user'
+  id: number
+  name: string
+}
+
+const tab = ref<'dept' | 'user'>('dept')
 const departments = ref<Department[]>([])
-const loading = ref(false)
+const users = ref<PlatformUser[]>([])
+const treeData = ref<TreeNode[]>([])
+const treeRef = ref<InstanceType<typeof ElTree>>()
 
-const createVisible = ref(false)
-const newUser = reactive({ username: '', password: '' })
+const subject = ref<Subject | null>(null)
+const shareMap = ref<Record<number, number>>({}) // folderId -> shareId
+const loadingShares = ref(false)
+const syncing = ref(false)
 
-const roleVisible = ref(false)
-const roleUser = ref<PlatformUser | null>(null)
-const roleForm = reactive({
-  is_assistant_admin: false,
-  is_boss: false,
-  is_active: true,
-  password: '',
-})
+function buildTree(flat: FolderModel[]): TreeNode[] {
+  const map = new Map<number, TreeNode>()
+  flat.forEach((f) => map.set(f.id, { id: f.id, name: f.name, parent: f.parent, children: [] }))
+  const roots: TreeNode[] = []
+  map.forEach((n) => {
+    if (n.parent && map.has(n.parent)) map.get(n.parent)!.children.push(n)
+    else roots.push(n)
+  })
+  return roots
+}
 
-const deptVisible = ref(false)
-const deptUser = ref<PlatformUser | null>(null)
-const memberships = ref<Membership[]>([])
-const addDeptId = ref<number | null>(null)
-
-const newDeptName = ref('')
-
-async function loadAll() {
-  loading.value = true
+async function selectSubject(s: Subject) {
+  subject.value = s
+  loadingShares.value = true
   try {
-    users.value = (await listUsers()).data
-    departments.value = (await listDepartments()).data
+    const shares = (s.type === 'dept' ? await listSharesByDept(s.id) : await listSharesByUser(s.id))
+      .data
+    const map: Record<number, number> = {}
+    shares.forEach((sh) => (map[sh.folder] = sh.id))
+    shareMap.value = map
+    syncing.value = true
+    treeRef.value?.setCheckedKeys(Object.keys(map).map(Number), false)
+    syncing.value = false
   } finally {
-    loading.value = false
+    loadingShares.value = false
   }
 }
 
-function roleTags(u: PlatformUser) {
-  const t: { text: string; type: 'danger' | 'warning' | 'success' | 'info' }[] = []
-  if (u.is_superuser) t.push({ text: '超级管理员', type: 'danger' })
-  if (u.is_assistant_admin) t.push({ text: '辅助管理员', type: 'warning' })
-  if (u.is_boss) t.push({ text: '老板', type: 'success' })
-  if (!t.length) t.push({ text: '普通用户', type: 'info' })
-  return t
-}
-
-async function handleCreate() {
-  if (!newUser.username || !newUser.password) return ElMessage.warning('请输入账号和密码')
-  await createUser({ ...newUser })
-  ElMessage.success('已创建')
-  createVisible.value = false
-  newUser.username = ''
-  newUser.password = ''
-  await loadAll()
-}
-
-function openRole(u: PlatformUser) {
-  roleUser.value = u
-  Object.assign(roleForm, {
-    is_assistant_admin: u.is_assistant_admin,
-    is_boss: u.is_boss,
-    is_active: u.is_active,
-    password: '',
-  })
-  roleVisible.value = true
-}
-async function saveRole() {
-  if (!roleUser.value) return
-  await updateUser(roleUser.value.id, { ...roleForm })
-  ElMessage.success('已保存')
-  roleVisible.value = false
-  await loadAll()
-}
-
-async function handleDelete(u: PlatformUser) {
-  await ElMessageBox.confirm(`确认删除用户「${u.username}」？`, '提示', { type: 'warning' })
-  await deleteUser(u.id)
-  ElMessage.success('已删除')
-  await loadAll()
-}
-
-async function openDept(u: PlatformUser) {
-  deptUser.value = u
-  addDeptId.value = null
-  deptVisible.value = true
-  memberships.value = (await listMemberships(u.id)).data
-}
-async function addMembership() {
-  if (!deptUser.value || !addDeptId.value) return ElMessage.warning('请选择部门')
-  await createMembership({ user: deptUser.value.id, department: addDeptId.value })
-  addDeptId.value = null
-  memberships.value = (await listMemberships(deptUser.value.id)).data
-}
-async function removeMembership(id: number) {
-  await deleteMembership(id)
-  if (deptUser.value) memberships.value = (await listMemberships(deptUser.value.id)).data
-}
-
-async function addDept() {
-  let name = newDeptName.value.trim()
-  if (!name) {
-    try {
-      const { value } = await ElMessageBox.prompt('请输入部门名称', '新建部门', {
-        confirmButtonText: '创建',
-        cancelButtonText: '取消',
-      })
-      name = (value ?? '').trim()
-    } catch {
-      return
+async function onCheck(_data: TreeNode, info: { checkedKeys: number[] }) {
+  if (syncing.value || !subject.value) return
+  const checked = new Set(info.checkedKeys)
+  const current = new Set(Object.keys(shareMap.value).map(Number))
+  // 新增
+  for (const fid of checked) {
+    if (!current.has(fid)) {
+      const payload =
+        subject.value.type === 'dept'
+          ? { folder: fid, subject_department: subject.value.id }
+          : { folder: fid, subject_user: subject.value.id }
+      const { data } = await createFolderShare(payload)
+      shareMap.value[fid] = data.id
     }
   }
-  if (!name) {
-    ElMessage.warning('请输入部门名称')
-    return
+  // 移除
+  for (const fid of current) {
+    if (!checked.has(fid)) {
+      await deleteFolderShare(shareMap.value[fid])
+      delete shareMap.value[fid]
+    }
   }
-  await createDepartment(name)
-  newDeptName.value = ''
-  departments.value = (await listDepartments()).data
-  ElMessage.success('已新建部门')
-}
-async function removeDept(d: Department) {
-  await ElMessageBox.confirm(`删除部门「${d.name}」？`, '提示', { type: 'warning' })
-  await deleteDepartment(d.id)
-  departments.value = (await listDepartments()).data
+  ElMessage.success({ message: '已更新权限', duration: 900 })
 }
 
-onMounted(loadAll)
+onMounted(async () => {
+  const [d, u, f] = await Promise.all([listDepartments(), listUsers(), listFolders()])
+  departments.value = d.data
+  users.value = u.data
+  treeData.value = buildTree(f.data)
+})
 </script>
 
 <template>
   <PageContainer
-    title="用户与部门"
-    subtitle="管理用户角色、部门归属（部门=用户组，用于文件夹授权）"
+    title="权限管理"
+    subtitle="选择人或部门，勾选 TA 能看的文件夹 · 授权自动包含子文件夹 · 最细到人"
   >
-    <el-row :gutter="16">
-      <el-col :span="16">
-        <el-card class="card" shadow="never">
-          <template #header>
-            <div class="head">
-              <span
-                ><el-icon><UserIcon /></el-icon> 用户</span
-              >
-              <el-button type="primary" size="small" :icon="Plus" @click="createVisible = true">
-                新建用户
-              </el-button>
-            </div>
+    <div class="perm">
+      <!-- 左：主体 -->
+      <aside class="subjects">
+        <div class="seg">
+          <button :class="{ on: tab === 'dept' }" @click="tab = 'dept'">
+            <el-icon><OfficeBuilding /></el-icon> 部门
+          </button>
+          <button :class="{ on: tab === 'user' }" @click="tab = 'user'">
+            <el-icon><UserIcon /></el-icon> 人员
+          </button>
+        </div>
+        <div class="slist">
+          <template v-if="tab === 'dept'">
+            <button
+              v-for="d in departments"
+              :key="'d' + d.id"
+              class="sitem"
+              :class="{ on: subject?.type === 'dept' && subject.id === d.id }"
+              @click="selectSubject({ type: 'dept', id: d.id, name: d.name })"
+            >
+              <el-icon><OfficeBuilding /></el-icon><span>{{ d.name }}</span>
+            </button>
+            <el-empty v-if="!departments.length" description="还没有部门" :image-size="46" />
           </template>
-          <el-table v-loading="loading" :data="users" stripe>
-            <el-table-column prop="username" label="账号" min-width="120" />
-            <el-table-column label="角色" min-width="200">
-              <template #default="{ row }">
-                <el-tag
-                  v-for="t in roleTags(row)"
-                  :key="t.text"
-                  :type="t.type"
-                  size="small"
-                  class="rt"
-                  >{{ t.text }}</el-tag
-                >
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="240" fixed="right">
-              <template #default="{ row }">
-                <el-button text type="primary" :icon="Key" @click="openRole(row)">角色</el-button>
-                <el-button text :icon="OfficeBuilding" @click="openDept(row)">部门</el-button>
-                <el-button
-                  text
-                  type="danger"
-                  :icon="Delete"
-                  :disabled="row.is_superuser"
-                  @click="handleDelete(row)"
-                  >删除</el-button
-                >
-              </template>
-            </el-table-column>
-          </el-table>
-        </el-card>
-      </el-col>
+          <template v-else>
+            <button
+              v-for="u in users"
+              :key="'u' + u.id"
+              class="sitem"
+              :class="{ on: subject?.type === 'user' && subject.id === u.id }"
+              @click="selectSubject({ type: 'user', id: u.id, name: u.username })"
+            >
+              <el-icon><UserIcon /></el-icon><span>{{ u.username }}</span>
+            </button>
+          </template>
+        </div>
+      </aside>
 
-      <el-col :span="8">
-        <el-card class="card" shadow="never">
-          <template #header
-            ><span
-              ><el-icon><OfficeBuilding /></el-icon> 部门</span
-            ></template
+      <!-- 右：文件夹勾选 -->
+      <section class="grant">
+        <div v-if="subject" class="grant-head">
+          <span class="muted">配置可见文件夹 ·</span>
+          <strong>{{ subject.name }}</strong>
+          <el-tag size="small" :type="subject.type === 'dept' ? 'success' : 'info'">
+            {{ subject.type === 'dept' ? '部门' : '个人' }}
+          </el-tag>
+        </div>
+        <div class="grant-body" v-loading="loadingShares">
+          <el-tree
+            v-show="subject"
+            ref="treeRef"
+            :data="treeData"
+            node-key="id"
+            show-checkbox
+            check-strictly
+            :props="{ label: 'name', children: 'children' }"
+            :expand-on-click-node="false"
+            default-expand-all
+            @check="onCheck"
           >
-          <div class="addrow">
-            <el-input
-              v-model="newDeptName"
-              size="small"
-              placeholder="新部门名"
-              @keyup.enter="addDept"
-            />
-            <el-button size="small" type="primary" :icon="Plus" @click="addDept" />
+            <template #default="{ node, data }">
+              <span class="tnode">
+                <el-icon class="ti">
+                  <FolderOpened v-if="node.expanded && data.children.length" />
+                  <Folder v-else />
+                </el-icon>
+                {{ data.name }}
+              </span>
+            </template>
+          </el-tree>
+          <div v-if="!subject" class="hint">
+            <el-icon :size="28"><OfficeBuilding /></el-icon>
+            <p>从左侧选择一个人或部门</p>
+            <span>再勾选 TA 能查看的文件夹</span>
           </div>
-          <div v-for="d in departments" :key="d.id" class="item">
-            <span>{{ d.name }}</span>
-            <el-button text type="danger" :icon="Delete" @click="removeDept(d)" />
-          </div>
-          <el-empty v-if="!departments.length" description="还没有部门" :image-size="50" />
-        </el-card>
-      </el-col>
-    </el-row>
-
-    <!-- 新建用户 -->
-    <el-dialog v-model="createVisible" title="新建用户" width="400px">
-      <el-form label-width="60px">
-        <el-form-item label="账号" required><el-input v-model="newUser.username" /></el-form-item>
-        <el-form-item label="密码" required>
-          <el-input v-model="newUser.password" type="password" show-password />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="createVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleCreate">创建</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 角色 -->
-    <el-dialog v-model="roleVisible" :title="`角色 · ${roleUser?.username}`" width="400px">
-      <el-form label-width="100px">
-        <el-form-item label="辅助管理员"
-          ><el-switch v-model="roleForm.is_assistant_admin"
-        /></el-form-item>
-        <el-form-item label="老板(看全部)"><el-switch v-model="roleForm.is_boss" /></el-form-item>
-        <el-form-item label="启用"><el-switch v-model="roleForm.is_active" /></el-form-item>
-        <el-form-item label="重置密码">
-          <el-input
-            v-model="roleForm.password"
-            type="password"
-            show-password
-            placeholder="留空不改"
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="roleVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveRole">保存</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 部门归属 -->
-    <el-dialog v-model="deptVisible" :title="`部门 · ${deptUser?.username}`" width="480px">
-      <el-table :data="memberships" size="small" border>
-        <el-table-column prop="department_name" label="所属部门" />
-        <el-table-column width="60">
-          <template #default="{ row }">
-            <el-button text type="danger" :icon="Delete" @click="removeMembership(row.id)" />
-          </template>
-        </el-table-column>
-        <template #empty><span class="muted">未加入任何部门</span></template>
-      </el-table>
-      <div class="addrow2">
-        <el-select v-model="addDeptId" placeholder="选择部门加入" style="width: 240px">
-          <el-option v-for="d in departments" :key="d.id" :label="d.name" :value="d.id" />
-        </el-select>
-        <el-button type="primary" :icon="Plus" @click="addMembership">加入</el-button>
-      </div>
-    </el-dialog>
+        </div>
+      </section>
+    </div>
   </PageContainer>
 </template>
 
 <style scoped>
-.card {
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius);
+.perm {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 16px;
+  min-height: 560px;
 }
-.head {
+.subjects,
+.grant {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.seg {
+  display: flex;
+  gap: 4px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.seg button {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px;
+  border: none;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  font-weight: 550;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.seg button.on {
+  background: var(--accent);
+  color: #fff;
+}
+.slist {
+  flex: 1;
+  overflow: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sitem {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 9px;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  border-radius: var(--r-sm);
+  font-size: 14px;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.sitem :deep(.el-icon) {
+  color: var(--ink-3);
+}
+.sitem:hover {
+  background: var(--surface-2);
+}
+.sitem.on {
+  background: var(--accent-weak);
+  color: var(--accent);
   font-weight: 600;
 }
-.rt {
-  margin-right: 6px;
+.sitem.on :deep(.el-icon) {
+  color: var(--accent);
 }
-.addrow {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-.addrow2 {
-  display: flex;
-  gap: 10px;
-  margin-top: 12px;
-}
-.item {
+.grant-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 8px 4px;
+  gap: 8px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+.grant-body {
+  flex: 1;
+  padding: 14px 18px;
+  overflow: auto;
+}
+.tnode {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.ti {
+  color: var(--accent);
 }
 .muted {
-  color: var(--app-text-secondary);
+  color: var(--ink-3);
+}
+.hint {
+  height: 100%;
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-3);
+  text-align: center;
+}
+.hint p {
+  margin: 12px 0 2px;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+.hint span {
+  font-size: 12px;
+}
+.grant-body :deep(.el-tree-node__content) {
+  height: 36px;
+  border-radius: var(--r-sm);
 }
 </style>

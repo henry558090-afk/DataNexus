@@ -45,7 +45,11 @@ class FolderShareViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
-        folder_id = self.request.query_params.get("folder")
-        if folder_id:
-            qs = qs.filter(folder_id=folder_id)
+        params = self.request.query_params
+        if params.get("folder"):
+            qs = qs.filter(folder_id=params["folder"])
+        if params.get("subject_user"):
+            qs = qs.filter(subject_user_id=params["subject_user"])
+        if params.get("subject_department"):
+            qs = qs.filter(subject_department_id=params["subject_department"])
         return qs

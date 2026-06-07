@@ -1,8 +1,9 @@
 """根 URL 路由。"""
 
+from django.conf import settings
 from django.contrib import admin
-from django.http import HttpRequest, JsonResponse
-from django.urls import include, path
+from django.http import FileResponse, HttpRequest, HttpResponse, JsonResponse
+from django.urls import include, path, re_path
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -33,7 +34,15 @@ router.register("audit-logs", AuditLogViewSet, basename="audit-log")
 
 def health(_request: HttpRequest) -> JsonResponse:
     """健康检查，便于确认服务可用。"""
-    return JsonResponse({"status": "ok", "service": "data-nexus", "version": "v0.15"})
+    return JsonResponse({"status": "ok", "service": "data-nexus", "version": "v0.16"})
+
+
+def spa(_request: HttpRequest):
+    """前端单页应用入口：非 api/admin/static 的路径都返回 index.html（支持前端路由刷新）。"""
+    index = settings.FRONTEND_DIST / "index.html"
+    if index.exists():
+        return FileResponse(open(index, "rb"))
+    return HttpResponse("前端未构建（请在 frontend 执行 npm run build）", status=404)
 
 
 @api_view(["GET"])
@@ -75,7 +84,7 @@ def me(request: Request) -> Response:
 
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
+    path("django-admin/", admin.site.urls),  # 挪开，给前端 /admin/* 让路
     path("api/health/", health, name="health"),
     path("api/auth/token/", LoginView.as_view(), name="auth-token"),  # 账号密码换 Token + 审计
     path("api/auth/me/", me, name="auth-me"),
@@ -87,4 +96,6 @@ urlpatterns = [
     path(
         "api/portal/executions/<int:pk>/download/", portal.portal_download, name="portal-download"
     ),
+    # 前端单页：放最后，排除 api/django-admin/static/media（/admin/* 留给前端）
+    re_path(r"^(?!api/|django-admin/|static/|media/).*$", spa, name="spa"),
 ]

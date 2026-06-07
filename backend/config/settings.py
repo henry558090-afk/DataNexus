@@ -54,6 +54,7 @@ AUTH_USER_MODEL = "accounts.User"
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",  # 生产直接发前端静态资源，免 Nginx
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -82,13 +83,16 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-# ---- 平台元数据库：SQLite ----
+# ---- 平台元数据库：默认 SQLite（开 WAL）；可用 DATABASE_URL 切到 MySQL，复用现有库 ----
+# 例：DATABASE_URL=mysql://user:pass@host:3306/datanexus
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
+    "default": env.db_url(
+        "DATABASE_URL", default=f"sqlite:///{(BASE_DIR / 'db.sqlite3').as_posix()}"
+    )
 }
+if DATABASES["default"]["ENGINE"].endswith("sqlite3"):
+    # 增大锁等待，配合 WAL（PRAGMA 在 accounts.apps.ready 里设），缓解 web+调度双进程并发写
+    DATABASES["default"].setdefault("OPTIONS", {})["timeout"] = 20
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -143,3 +147,37 @@ if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+
+# ---- 前端发布：生产把 frontend/dist 交给 WhiteNoise，在根路径直接发页面（免 Nginx）----
+FRONTEND_DIST = BASE_DIR.parent / "frontend" / "dist"
+if FRONTEND_DIST.exists():
+    WHITENOISE_ROOT = str(FRONTEND_DIST)
+WHITENOISE_INDEX_FILE = True
+
+# ---- 日志：开发输出控制台；生产滚动写文件，便于排查 ----
+LOG_DIR = BASE_DIR / "logs"
+if not DEBUG:
+    LOG_DIR.mkdir(exist_ok=True)
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {"std": {"format": "{asctime} {levelname} {name} {message}", "style": "{"}},
+    "handlers": {
+        "console": {"class": "logging.StreamHandler", "formatter": "std"},
+        **(
+            {}
+            if DEBUG
+            else {
+                "file": {
+                    "class": "logging.handlers.RotatingFileHandler",
+                    "filename": str(LOG_DIR / "app.log"),
+                    "maxBytes": 10 * 1024 * 1024,
+                    "backupCount": 5,
+                    "formatter": "std",
+                    "encoding": "utf-8",
+                }
+            }
+        ),
+    },
+    "root": {"handlers": ["console"] if DEBUG else ["console", "file"], "level": "INFO"},
+}

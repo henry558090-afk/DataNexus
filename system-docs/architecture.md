@@ -1,7 +1,7 @@
 # data-nexus 当前系统架构
 
 > 本文件是**当前系统的真实快照**，随代码变更同步更新（开发规范第 8 节）。
-> 最近更新：2026-06-06　|　对应版本：**v0.15**（审计日志 + 列表分页 + 生产安全加固，dev 分支）
+> 最近更新：2026-06-07　|　对应版本：**v0.16**（最小生产化：单服务发布，无 Nginx/Docker/PG，dev 分支）
 
 ---
 
@@ -116,7 +116,8 @@ User（is_superuser / is_assistant_admin / is_boss）
 | `/api/memberships/` | CRUD | 部门成员（总监/主管/成员 + 看全部） | 管理员 | ✅ |
 | `/api/grants/` | CRUD | 成员授权（个人/角色组 → 分类/数据集） | 管理员 | ✅ |
 | `/api/audit-logs/` | GET | 审计日志（分页，?action/?user 过滤） | 管理员 | ✅ |
-| `/admin/` | - | Django 后台 | 登录 | ✅ |
+| `/` 及非 api 路径 | GET | 前端 SPA（WhiteNoise 发 dist，支持前端路由） | - | ✅ |
+| `/django-admin/` | - | Django 后台（挪开给前端 /admin/* 让路） | 登录 | ✅ |
 
 > 列表分页：`/api/executions/`、`/api/audit-logs/` 返回 `{count,next,previous,results}`（page_size=20）；其余列表为完整数组。
 > 审计：登录、运行数据集、下载文件均留痕（账号/动作/对象/IP/时间）。
@@ -145,11 +146,15 @@ npm run dev      # http://localhost:5179 ，/api 自动代理到后端 8000
 
 ---
 
-## 6. 部署
+## 6. 部署（最小方案，详见 docs/部署.md）
 
-- 生产：Linux（systemd / Docker，待定）；开发：本地 Windows，代码跨平台。
-- **定时调度**：另起单进程 `python manage.py runscheduler`（每 30s 同步数据集 cron/interval；须仅一个实例，见技术方案 §10.1）。
+- **无 Nginx / 无 Docker / 无 PostgreSQL**。生产 = 两个进程：
+  - `gunicorn config.wsgi`（一个进程同时发**前端 SPA**（WhiteNoise 发 frontend/dist）与 **/api**）；
+  - `python manage.py runscheduler`（定时，单实例）。
+- 元数据库：默认 **SQLite（开 WAL + busy_timeout）**，缓解 web/调度双进程并发写；可用 `DATABASE_URL` 切到现有 **MySQL**。
+- 业务数据源：外部 Oracle / MySQL（只读账号）。
 - **执行历史保留**：每数据集保留最近 `EXECUTION_KEEP`（默认 20）次，超出连同文件自动清理。
+- 开发：本地 Windows（端口 8010/5179，vite 代理），代码跨平台。
 
 ---
 

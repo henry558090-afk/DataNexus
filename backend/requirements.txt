@@ -8,6 +8,7 @@ PyMySQL>=1.1          # MySQL 纯 Python 驱动（免系统依赖）
 openpyxl>=3.1
 cryptography>=42
 APScheduler>=3.10     # 定时调度（进程内，免 Redis/Celery）
+whitenoise>=6.6       # 生产由 Django 直接发前端静态资源（免 Nginx）
 
 # 开发 / 质量工具
 ruff>=0.6

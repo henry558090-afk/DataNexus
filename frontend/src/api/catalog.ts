@@ -1,40 +1,59 @@
 import http from '@/api/http'
 
-export interface Category {
+export interface Folder {
   id: number
   name: string
-  department: number
-  department_name: string
+  parent: number | null
   order: number
+  created_at: string
+}
+
+export function listFolders() {
+  return http.get<Folder[]>('/folders/')
+}
+export function createFolder(name: string, parent: number | null) {
+  return http.post<Folder>('/folders/', { name, parent })
+}
+export function updateFolder(id: number, data: Partial<{ name: string; parent: number | null }>) {
+  return http.patch<Folder>(`/folders/${id}/`, data)
+}
+export function deleteFolder(id: number) {
+  return http.delete(`/folders/${id}/`)
 }
 
 export interface Department {
   id: number
   name: string
   order: number
-  categories: Category[]
 }
-
 export function listDepartments() {
   return http.get<Department[]>('/departments/')
 }
-
 export function createDepartment(name: string) {
   return http.post<Department>('/departments/', { name })
 }
-
 export function deleteDepartment(id: number) {
   return http.delete(`/departments/${id}/`)
 }
 
-export function listCategories() {
-  return http.get<Category[]>('/categories/')
+export interface FolderShare {
+  id: number
+  folder: number
+  subject_department: number | null
+  department_name: string | null
+  subject_user: number | null
+  username: string | null
 }
-
-export function createCategory(name: string, department: number) {
-  return http.post<Category>('/categories/', { name, department })
+export function listFolderShares(folderId: number) {
+  return http.get<FolderShare[]>('/folder-shares/', { params: { folder: folderId } })
 }
-
-export function deleteCategory(id: number) {
-  return http.delete(`/categories/${id}/`)
+export function createFolderShare(data: {
+  folder: number
+  subject_department?: number
+  subject_user?: number
+}) {
+  return http.post<FolderShare>('/folder-shares/', data)
+}
+export function deleteFolderShare(id: number) {
+  return http.delete(`/folder-shares/${id}/`)
 }

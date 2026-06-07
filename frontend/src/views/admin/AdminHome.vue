@@ -3,15 +3,15 @@ import { Coin, Document, Files, TrendCharts } from '@element-plus/icons-vue'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
-import { type Execution, listExecutions } from '@/api/execution'
+import { type DataFile, listDataFiles } from '@/api/datafile'
 import { type Stats, getStats } from '@/api/stats'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const auth = useAuthStore()
 
-const stats = ref<Stats>({ datasources: 0, datasets: 0, executions: 0, today_runs: 0 })
-const recent = ref<Execution[]>([])
+const stats = ref<Stats>({ datasources: 0, datasets: 0, files: 0, today_runs: 0 })
+const recent = ref<DataFile[]>([])
 
 const cards = computed(() => [
   {
@@ -31,37 +31,36 @@ const cards = computed(() => [
     to: '/admin/datasets',
   },
   {
-    label: '执行记录',
-    value: stats.value.executions,
+    label: '数据文件',
+    value: stats.value.files,
     icon: Files,
     color: '#d97706',
     bg: '#fdf0e0',
-    to: '/admin/executions',
+    to: '/admin/files',
   },
   {
-    label: '今日运行',
+    label: '今日生成',
     value: stats.value.today_runs,
     icon: TrendCharts,
     color: '#9333ea',
     bg: '#f3e9fd',
-    to: '/admin/executions',
+    to: '/admin/files',
   },
 ])
 
 const statusMeta: Record<string, { text: string; type: 'success' | 'danger' | 'info' }> = {
   success: { text: '成功', type: 'success' },
   failed: { text: '失败', type: 'danger' },
-  running: { text: '运行中', type: 'info' },
+  running: { text: '生成中', type: 'info' },
 }
-
 function fmtTime(s: string): string {
   return s ? s.slice(0, 19).replace('T', ' ') : '-'
 }
 
 onMounted(async () => {
-  const [s, ex] = await Promise.all([getStats(), listExecutions()])
+  const [s, f] = await Promise.all([getStats(), listDataFiles()])
   stats.value = s.data
-  recent.value = ex.data.results.slice(0, 8)
+  recent.value = f.data.results.slice(0, 8)
 })
 </script>
 
@@ -70,7 +69,7 @@ onMounted(async () => {
     <div class="banner">
       <div>
         <h2 class="hello">你好，{{ auth.username || '...' }} 👋</h2>
-        <p class="desc">配置数据源、编写数据集，把 SQL 跑成 Excel 分享给团队。</p>
+        <p class="desc">配数据源、写数据集，把 SQL 跑成 Excel 放进文件夹，按部门分享。</p>
       </div>
       <div class="banner-art">DN</div>
     </div>
@@ -98,14 +97,13 @@ onMounted(async () => {
     <el-card class="recent" shadow="never">
       <template #header>
         <div class="rhead">
-          <span class="rtitle">最近运行</span>
-          <el-button text type="primary" @click="router.push('/admin/executions')"
-            >查看全部</el-button
-          >
+          <span class="rtitle">最近生成的文件</span>
+          <el-button text type="primary" @click="router.push('/admin/files')">查看全部</el-button>
         </div>
       </template>
-      <el-table :data="recent" size="default">
-        <el-table-column prop="dataset_name" label="数据集" min-width="160" />
+      <el-table :data="recent">
+        <el-table-column prop="name" label="文件名" min-width="200" />
+        <el-table-column prop="folder_name" label="文件夹" min-width="120" />
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
             <el-tag :type="statusMeta[row.status]?.type ?? 'info'" size="small">
@@ -113,12 +111,11 @@ onMounted(async () => {
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="row_count" label="行数" width="100" />
-        <el-table-column label="时间" min-width="170">
-          <template #default="{ row }">{{ fmtTime(row.started_at) }}</template>
+        <el-table-column label="时间" min-width="160">
+          <template #default="{ row }">{{ fmtTime(row.created_at) }}</template>
         </el-table-column>
         <template #empty>
-          <el-empty description="还没有运行记录，去数据集页跑一个吧" :image-size="60" />
+          <el-empty description="还没有文件，去数据集页跑一个吧" :image-size="60" />
         </template>
       </el-table>
     </el-card>

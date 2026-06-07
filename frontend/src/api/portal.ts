@@ -1,50 +1,34 @@
 import http from '@/api/http'
 
-export interface PortalDataset {
+export interface PortalFolder {
   id: number
   name: string
-  description: string
+  children: PortalFolder[]
 }
 
-export interface PortalCategory {
+export interface PortalFile {
   id: number
   name: string
-  datasets: PortalDataset[]
-}
-
-export interface PortalDepartment {
-  id: number
-  name: string
-  categories: PortalCategory[]
-}
-
-export interface PortalExecution {
-  id: number
-  status: string
   row_count: number | null
   file_size: number | null
-  started_at: string
-}
-
-export interface PortalDetail {
-  id: number
-  name: string
-  description: string
-  executions: PortalExecution[]
+  created_at: string
+  folder_id: number
 }
 
 export function getTree() {
-  return http.get<PortalDepartment[]>('/portal/tree/')
+  return http.get<PortalFolder[]>('/portal/tree/')
 }
 
-export function getDatasetDetail(id: number) {
-  return http.get<PortalDetail>(`/portal/datasets/${id}/`)
+export function getFolderFiles(folderId: number) {
+  return http.get<PortalFile[]>(`/portal/folders/${folderId}/files/`)
 }
 
-export async function downloadPortal(execId: number, filename: string) {
-  const resp = await http.get(`/portal/executions/${execId}/download/`, {
-    responseType: 'blob',
-  })
+export function searchFiles(q: string) {
+  return http.get<PortalFile[]>('/portal/search/', { params: { q } })
+}
+
+export async function downloadFile(id: number, filename: string) {
+  const resp = await http.get(`/portal/files/${id}/download/`, { responseType: 'blob' })
   const url = URL.createObjectURL(resp.data as Blob)
   const a = document.createElement('a')
   a.href = url

@@ -34,7 +34,7 @@ router.register("audit-logs", AuditLogViewSet, basename="audit-log")
 
 def health(_request: HttpRequest) -> JsonResponse:
     """健康检查，便于确认服务可用。"""
-    return JsonResponse({"status": "ok", "service": "data-nexus", "version": "v0.17"})
+    return JsonResponse({"status": "ok", "service": "data-nexus", "version": "v0.19"})
 
 
 def spa(_request: HttpRequest):

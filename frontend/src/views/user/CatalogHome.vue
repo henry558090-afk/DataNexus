@@ -1,166 +1,196 @@
 <script setup lang="ts">
-import { Document, Folder, Search } from '@element-plus/icons-vue'
+import { Document, Download, Folder as FolderIcon, Search } from '@element-plus/icons-vue'
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 
-import { type PortalDepartment, getTree } from '@/api/portal'
+import {
+  type PortalFile,
+  type PortalFolder,
+  downloadFile,
+  getFolderFiles,
+  getTree,
+  searchFiles,
+} from '@/api/portal'
 
-const router = useRouter()
-
-const loading = ref(false)
-const tree = ref<PortalDepartment[]>([])
+const loadingTree = ref(false)
+const loadingFiles = ref(false)
+const tree = ref<PortalFolder[]>([])
+const files = ref<PortalFile[]>([])
+const currentFolder = ref<PortalFolder | null>(null)
+const breadcrumb = ref<string[]>([])
 const keyword = ref('')
-const selected = ref<{ type: 'dept' | 'cat'; id: number } | null>(null)
+const searching = ref(false)
+const sortBy = ref<'time' | 'name'>('time')
 
-interface FlatItem {
-  id: number
-  name: string
-  description: string
-  deptId: number
-  deptName: string
-  catId: number
-  catName: string
+const sortedFiles = computed(() => {
+  const arr = [...files.value]
+  if (sortBy.value === 'name') arr.sort((a, b) => a.name.localeCompare(b.name))
+  else arr.sort((a, b) => b.created_at.localeCompare(a.created_at))
+  return arr
+})
+
+function fmtTime(s: string) {
+  return s ? s.slice(0, 19).replace('T', ' ') : '-'
+}
+function fmtSize(n: number | null) {
+  if (!n) return '-'
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / 1024 / 1024).toFixed(1)} MB`
 }
 
-// 扁平化所有可见数据集，便于搜索与筛选
-const allItems = computed<FlatItem[]>(() => {
-  const items: FlatItem[] = []
-  for (const dep of tree.value) {
-    for (const cat of dep.categories) {
-      for (const ds of cat.datasets) {
-        items.push({
-          id: ds.id,
-          name: ds.name,
-          description: ds.description,
-          deptId: dep.id,
-          deptName: dep.name,
-          catId: cat.id,
-          catName: cat.name,
-        })
-      }
-    }
+function findPath(nodes: PortalFolder[], id: number, trail: string[] = []): string[] | null {
+  for (const n of nodes) {
+    const next = [...trail, n.name]
+    if (n.id === id) return next
+    const r = findPath(n.children, id, next)
+    if (r) return r
   }
-  return items
-})
-
-// 左侧树数据
-const treeData = computed(() =>
-  tree.value.map((dep) => ({
-    key: `dept-${dep.id}`,
-    name: dep.name,
-    type: 'dept' as const,
-    id: dep.id,
-    children: dep.categories.map((cat) => ({
-      key: `cat-${cat.id}`,
-      name: cat.name,
-      type: 'cat' as const,
-      id: cat.id,
-    })),
-  })),
-)
-
-// 主区显示的数据集
-const displayed = computed<FlatItem[]>(() => {
-  const kw = keyword.value.trim().toLowerCase()
-  if (kw) return allItems.value.filter((i) => i.name.toLowerCase().includes(kw))
-  if (!selected.value) return allItems.value
-  if (selected.value.type === 'dept') {
-    return allItems.value.filter((i) => i.deptId === selected.value!.id)
-  }
-  return allItems.value.filter((i) => i.catId === selected.value!.id)
-})
-
-const heading = computed(() => {
-  if (keyword.value.trim()) return `搜索 “${keyword.value.trim()}”`
-  if (!selected.value) return '全部数据'
-  const item = allItems.value.find((i) =>
-    selected.value!.type === 'cat'
-      ? i.catId === selected.value!.id
-      : i.deptId === selected.value!.id,
-  )
-  if (!item) return '全部数据'
-  return selected.value.type === 'cat' ? `${item.deptName} / ${item.catName}` : item.deptName
-})
-
-function onNodeClick(node: { type: 'dept' | 'cat'; id: number }) {
-  keyword.value = ''
-  selected.value = { type: node.type, id: node.id }
+  return null
 }
 
-async function load() {
-  loading.value = true
+async function loadTree() {
+  loadingTree.value = true
   try {
     tree.value = (await getTree()).data
   } finally {
-    loading.value = false
+    loadingTree.value = false
   }
 }
 
-function open(id: number) {
-  router.push(`/dataset/${id}`)
+async function onSelectFolder(node: PortalFolder) {
+  searching.value = false
+  keyword.value = ''
+  currentFolder.value = node
+  breadcrumb.value = findPath(tree.value, node.id) ?? [node.name]
+  loadingFiles.value = true
+  try {
+    files.value = (await getFolderFiles(node.id)).data
+  } finally {
+    loadingFiles.value = false
+  }
 }
 
-onMounted(load)
+async function onSearch() {
+  const q = keyword.value.trim()
+  if (!q) {
+    searching.value = false
+    return
+  }
+  searching.value = true
+  currentFolder.value = null
+  loadingFiles.value = true
+  try {
+    files.value = (await searchFiles(q)).data
+  } finally {
+    loadingFiles.value = false
+  }
+}
+
+async function handleDownload(f: PortalFile) {
+  await downloadFile(f.id, f.name)
+}
+
+onMounted(loadTree)
 </script>
 
 <template>
-  <div v-loading="loading" class="portal">
-    <aside class="side">
-      <div class="side-title">数据目录</div>
-      <el-tree
-        :data="treeData"
-        node-key="key"
-        :props="{ label: 'name', children: 'children' }"
-        :expand-on-click-node="false"
-        default-expand-all
-        @node-click="onNodeClick"
-      >
-        <template #default="{ data }">
-          <span class="node">
-            <el-icon><component :is="data.type === 'dept' ? Folder : Document" /></el-icon>
-            {{ data.name }}
-          </span>
-        </template>
-      </el-tree>
-      <el-empty v-if="!tree.length && !loading" description="暂无授权数据" :image-size="50" />
-    </aside>
+  <div>
+    <div class="searchbar">
+      <el-input
+        v-model="keyword"
+        size="large"
+        class="search"
+        :prefix-icon="Search"
+        placeholder="搜索全部数据文件…"
+        clearable
+        @keyup.enter="onSearch"
+        @clear="onSearch"
+      />
+      <el-button size="large" type="primary" @click="onSearch">搜索</el-button>
+    </div>
 
-    <main class="main">
-      <div class="bar">
-        <h2 class="h">{{ heading }}</h2>
-        <el-input
-          v-model="keyword"
-          class="search"
-          :prefix-icon="Search"
-          placeholder="搜索数据文件…"
-          clearable
-        />
-      </div>
-
-      <div v-if="displayed.length" class="cards">
-        <el-card
-          v-for="item in displayed"
-          :key="item.id"
-          class="ds-card"
-          shadow="hover"
-          @click="open(item.id)"
+    <div class="explorer">
+      <aside class="side">
+        <div class="side-title">数据目录</div>
+        <el-tree
+          v-loading="loadingTree"
+          :data="tree"
+          node-key="id"
+          :props="{ label: 'name', children: 'children' }"
+          :expand-on-click-node="false"
+          default-expand-all
+          @node-click="onSelectFolder"
         >
-          <div class="ds-inner">
-            <el-icon class="ds-icon"><Document /></el-icon>
-            <div class="ds-body">
-              <div class="ds-name">{{ item.name }}</div>
-              <div class="ds-path">{{ item.deptName }} / {{ item.catName }}</div>
-            </div>
+          <template #default="{ data }">
+            <span class="tnode"
+              ><el-icon><FolderIcon /></el-icon>{{ data.name }}</span
+            >
+          </template>
+        </el-tree>
+        <el-empty v-if="!tree.length && !loadingTree" description="暂无授权目录" :image-size="50" />
+      </aside>
+
+      <main class="main">
+        <div class="bar">
+          <div class="crumb">
+            <template v-if="searching">搜索结果：“{{ keyword }}”</template>
+            <template v-else-if="breadcrumb.length">
+              <el-icon><FolderIcon /></el-icon>
+              <span v-for="(c, i) in breadcrumb" :key="i" class="cseg">
+                {{ c }}<span v-if="i < breadcrumb.length - 1"> / </span>
+              </span>
+            </template>
+            <span v-else class="muted">← 从左侧选择文件夹</span>
           </div>
-        </el-card>
-      </div>
-      <el-empty v-else description="没有匹配的数据" />
-    </main>
+          <el-radio-group v-model="sortBy" size="small">
+            <el-radio-button value="time">按时间</el-radio-button>
+            <el-radio-button value="name">按名称</el-radio-button>
+          </el-radio-group>
+        </div>
+
+        <el-table v-loading="loadingFiles" :data="sortedFiles">
+          <el-table-column label="文件名" min-width="240">
+            <template #default="{ row }">
+              <span class="fname"
+                ><el-icon class="fic"><Document /></el-icon>{{ row.name }}</span
+              >
+            </template>
+          </el-table-column>
+          <el-table-column prop="row_count" label="行数" width="100" />
+          <el-table-column label="大小" width="110">
+            <template #default="{ row }">{{ fmtSize(row.file_size) }}</template>
+          </el-table-column>
+          <el-table-column label="时间" min-width="170">
+            <template #default="{ row }">{{ fmtTime(row.created_at) }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="110" fixed="right">
+            <template #default="{ row }">
+              <el-button text type="primary" :icon="Download" @click="handleDownload(row)">
+                下载
+              </el-button>
+            </template>
+          </el-table-column>
+          <template #empty>
+            <el-empty :description="searching ? '没有匹配的文件' : '该文件夹暂无文件'" />
+          </template>
+        </el-table>
+      </main>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.portal {
+.searchbar {
+  display: flex;
+  gap: 12px;
+  max-width: 720px;
+  margin: 8px auto 24px;
+}
+.search :deep(.el-input__wrapper) {
+  border-radius: 999px;
+  box-shadow: 0 6px 20px rgba(79, 110, 247, 0.12);
+}
+.explorer {
   display: grid;
   grid-template-columns: 260px 1fr;
   gap: 20px;
@@ -178,57 +208,39 @@ onMounted(load)
   font-weight: 700;
   margin-bottom: 12px;
 }
-.node {
+.tnode {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+.main {
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius);
+  padding: 16px 20px;
 }
 .bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
-  gap: 16px;
+  margin-bottom: 12px;
 }
-.h {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 700;
-}
-.search {
-  max-width: 320px;
-}
-.search :deep(.el-input__wrapper) {
-  border-radius: 999px;
-}
-.cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 14px;
-}
-.ds-card {
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius);
-  cursor: pointer;
-}
-.ds-inner {
+.crumb {
   display: flex;
   align-items: center;
-  gap: 14px;
-}
-.ds-icon {
-  font-size: 24px;
-  color: var(--el-color-primary);
-  background: var(--el-color-primary-light-9);
-  padding: 10px;
-  border-radius: 12px;
-}
-.ds-name {
+  gap: 6px;
   font-weight: 600;
 }
-.ds-path {
-  font-size: 12px;
+.fname {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.fic {
+  color: var(--el-color-primary);
+}
+.muted {
   color: var(--app-text-secondary);
-  margin-top: 2px;
+  font-weight: 400;
 }
 </style>

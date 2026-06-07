@@ -3,7 +3,7 @@ import http from '@/api/http'
 export interface Stats {
   datasources: number
   datasets: number
-  executions: number
+  files: number
   today_runs: number
 }
 

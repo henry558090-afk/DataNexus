@@ -1,37 +1,43 @@
 import http from '@/api/http'
 
-export interface DatasetLatest {
+export interface DatasetLastRun {
   id: number
   status: string
   row_count: number | null
-  file_size: number | null
-  started_at: string
+  created_at: string
 }
 
 export interface Dataset {
   id: number
   name: string
   description: string
-  category: number | null
   datasource: number
   datasource_name: string
   sql_text: string
+  target_folder: number | null
+  folder_name: string | null
+  file_prefix: string
+  date_format: string
   cron: string
   interval_minutes: number | null
+  keep_count: number | null
+  keep_days: number | null
   is_active: boolean
-  created_at: string
-  updated_at: string
-  latest: DatasetLatest | null
+  last_run: DatasetLastRun | null
 }
 
 export interface DatasetInput {
   name: string
   description?: string
   datasource: number | null
-  category?: number | null
   sql_text: string
+  target_folder?: number | null
+  file_prefix?: string
+  date_format?: string
   cron?: string
   interval_minutes?: number | null
+  keep_count?: number | null
+  keep_days?: number | null
 }
 
 export interface PreviewResult {
@@ -41,7 +47,7 @@ export interface PreviewResult {
   rows?: unknown[][]
 }
 
-export interface ExecutionResult {
+export interface RunResult {
   id: number
   status: string
   row_count: number | null
@@ -51,23 +57,18 @@ export interface ExecutionResult {
 export function listDatasets() {
   return http.get<Dataset[]>('/datasets/')
 }
-
 export function createDataset(data: DatasetInput) {
   return http.post<Dataset>('/datasets/', data)
 }
-
 export function updateDataset(id: number, data: Partial<DatasetInput>) {
   return http.patch<Dataset>(`/datasets/${id}/`, data)
 }
-
 export function deleteDataset(id: number) {
   return http.delete(`/datasets/${id}/`)
 }
-
 export function previewDataset(id: number) {
   return http.post<PreviewResult>(`/datasets/${id}/preview/`)
 }
-
 export function runDataset(id: number) {
-  return http.post<ExecutionResult>(`/datasets/${id}/run/`)
+  return http.post<RunResult>(`/datasets/${id}/run/`)
 }

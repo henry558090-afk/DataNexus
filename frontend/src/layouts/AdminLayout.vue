@@ -25,9 +25,9 @@ const menus = [
   { index: '/admin/home', title: '工作台', icon: DataLine },
   { index: '/admin/datasources', title: '数据源', icon: Coin },
   { index: '/admin/datasets', title: '数据集', icon: Document },
-  { index: '/admin/catalog', title: '目录管理', icon: Folder },
-  { index: '/admin/permission', title: '用户与权限', icon: UserIcon },
-  { index: '/admin/executions', title: '执行记录', icon: Files },
+  { index: '/admin/folders', title: '文件夹', icon: Folder },
+  { index: '/admin/files', title: '数据文件', icon: Files },
+  { index: '/admin/permission', title: '用户与部门', icon: UserIcon },
   { index: '/admin/audit', title: '审计日志', icon: List },
 ]
 

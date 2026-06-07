@@ -14,42 +14,53 @@ import {
   runDataset,
   updateDataset,
 } from '@/api/dataset'
-import { type Category, listCategories } from '@/api/catalog'
+import { type Folder, listFolders } from '@/api/catalog'
 import { type DataSource, listDataSources } from '@/api/datasource'
-import { downloadExecution } from '@/api/execution'
+import { downloadDataFile } from '@/api/datafile'
 import PageContainer from '@/components/PageContainer.vue'
 
 const loading = ref(false)
 const rows = ref<Dataset[]>([])
 const datasources = ref<DataSource[]>([])
-const categories = ref<Category[]>([])
+const folders = ref<Folder[]>([])
 
 const dialogVisible = ref(false)
 const editingId = ref<number | null>(null)
 const saving = ref(false)
+const runningId = ref<number | null>(null)
 
 const previewVisible = ref(false)
 const previewLoading = ref(false)
 const preview = ref<PreviewResult | null>(null)
 
-const runningId = ref<number | null>(null)
-
 const form = reactive<DatasetInput>({
   name: '',
   description: '',
   datasource: null,
-  category: null,
   sql_text: '',
+  target_folder: null,
+  file_prefix: '',
+  date_format: '%Y%m%d',
+  keep_count: null,
+  keep_days: null,
 })
 
 type ScheduleType = 'manual' | 'interval' | 'daily' | 'cron'
 const schedule = reactive({ type: 'manual' as ScheduleType, interval: 60, time: '08:00', cron: '' })
 
-function resetSchedule() {
-  schedule.type = 'manual'
-  schedule.interval = 60
-  schedule.time = '08:00'
-  schedule.cron = ''
+function resetForm() {
+  Object.assign(form, {
+    name: '',
+    description: '',
+    datasource: null,
+    sql_text: '',
+    target_folder: null,
+    file_prefix: '',
+    date_format: '%Y%m%d',
+    keep_count: null,
+    keep_days: null,
+  })
+  Object.assign(schedule, { type: 'manual', interval: 60, time: '08:00', cron: '' })
 }
 
 function scheduleToFields(): { cron: string; interval_minutes: number | null } {
@@ -63,17 +74,10 @@ function scheduleToFields(): { cron: string; interval_minutes: number | null } {
 }
 
 function fieldsToSchedule(row: Dataset) {
-  resetSchedule()
+  Object.assign(schedule, { type: 'manual', interval: 60, time: '08:00', cron: '' })
   if (row.cron) {
     const p = row.cron.trim().split(/\s+/)
-    if (
-      p.length === 5 &&
-      p[2] === '*' &&
-      p[3] === '*' &&
-      p[4] === '*' &&
-      /^\d+$/.test(p[0]) &&
-      /^\d+$/.test(p[1])
-    ) {
+    if (p.length === 5 && p[2] === '*' && p[3] === '*' && p[4] === '*' && /^\d+$/.test(p[0])) {
       schedule.type = 'daily'
       schedule.time = `${p[1].padStart(2, '0')}:${p[0].padStart(2, '0')}`
     } else {
@@ -109,14 +113,7 @@ async function load() {
 
 function openCreate() {
   editingId.value = null
-  Object.assign(form, {
-    name: '',
-    description: '',
-    datasource: null,
-    category: null,
-    sql_text: '',
-  })
-  resetSchedule()
+  resetForm()
   dialogVisible.value = true
 }
 
@@ -126,8 +123,12 @@ function openEdit(row: Dataset) {
     name: row.name,
     description: row.description,
     datasource: row.datasource,
-    category: row.category,
     sql_text: row.sql_text,
+    target_folder: row.target_folder,
+    file_prefix: row.file_prefix,
+    date_format: row.date_format,
+    keep_count: row.keep_count,
+    keep_days: row.keep_days,
   })
   fieldsToSchedule(row)
   dialogVisible.value = true
@@ -141,17 +142,25 @@ async function handleSave() {
   saving.value = true
   try {
     const payload = { ...form, ...scheduleToFields() }
-    if (editingId.value) {
-      await updateDataset(editingId.value, payload)
-      ElMessage.success('已更新')
-    } else {
-      await createDataset(payload)
-      ElMessage.success('已创建')
-    }
+    if (editingId.value) await updateDataset(editingId.value, payload)
+    else await createDataset(payload)
+    ElMessage.success('已保存')
     dialogVisible.value = false
     await load()
   } finally {
     saving.value = false
+  }
+}
+
+async function handleRun(row: Dataset) {
+  runningId.value = row.id
+  try {
+    const { data } = await runDataset(row.id)
+    if (data.status === 'success') ElMessage.success(`运行成功，共 ${data.row_count} 行`)
+    else ElMessage.error(`运行失败：${data.error_msg}`)
+    await load()
+  } finally {
+    runningId.value = null
   }
 }
 
@@ -168,27 +177,12 @@ async function handlePreview(row: Dataset) {
   }
 }
 
-async function handleRun(row: Dataset) {
-  runningId.value = row.id
-  try {
-    const { data } = await runDataset(row.id)
-    if (data.status === 'success') {
-      ElMessage.success(`运行成功，共 ${data.row_count} 行`)
-    } else {
-      ElMessage.error(`运行失败：${data.error_msg}`)
-    }
-    await load()
-  } finally {
-    runningId.value = null
-  }
-}
-
 async function handleDownload(row: Dataset) {
-  if (!row.latest || row.latest.status !== 'success') {
-    ElMessage.warning('暂无可下载的文件，请先运行')
+  if (!row.last_run || row.last_run.status !== 'success') {
+    ElMessage.warning('暂无可下载文件，请先运行')
     return
   }
-  await downloadExecution(row.latest.id, `${row.name}.xlsx`)
+  await downloadDataFile(row.last_run.id, `${row.name}.xlsx`)
 }
 
 async function handleDelete(row: Dataset) {
@@ -199,46 +193,42 @@ async function handleDelete(row: Dataset) {
 }
 
 onMounted(async () => {
-  await Promise.all([load(), loadDatasources(), loadCategories()])
+  await Promise.all([
+    load(),
+    listDataSources().then((r) => (datasources.value = r.data)),
+    listFolders().then((r) => (folders.value = r.data)),
+  ])
 })
-
-async function loadDatasources() {
-  datasources.value = (await listDataSources()).data
-}
-
-async function loadCategories() {
-  categories.value = (await listCategories()).data
-}
 </script>
 
 <template>
-  <PageContainer title="数据集" subtitle="编写 SQL，运行并导出 Excel">
+  <PageContainer title="数据集" subtitle="写 SQL → 定时/手动跑 → 在目标文件夹新增带日期命名的文件">
     <template #actions>
       <el-button type="primary" :icon="Plus" @click="openCreate">新建数据集</el-button>
     </template>
 
     <el-card class="card" shadow="never">
       <el-table v-loading="loading" :data="rows" stripe>
-        <el-table-column prop="name" label="名称" min-width="150" />
-        <el-table-column prop="datasource_name" label="数据源" min-width="120" />
-        <el-table-column label="定时" min-width="120">
+        <el-table-column prop="name" label="名称" min-width="140" />
+        <el-table-column prop="datasource_name" label="数据源" min-width="100" />
+        <el-table-column label="目标文件夹" min-width="120">
+          <template #default="{ row }">{{ row.folder_name || '未指定' }}</template>
+        </el-table-column>
+        <el-table-column label="定时" min-width="110">
           <template #default="{ row }">{{ scheduleSummary(row) }}</template>
         </el-table-column>
-        <el-table-column label="最新结果" min-width="150">
+        <el-table-column label="最近" min-width="110">
           <template #default="{ row }">
-            <template v-if="row.latest">
-              <el-tag v-if="row.latest.status === 'success'" type="success" size="small">
-                {{ row.latest.row_count }} 行
-              </el-tag>
-              <el-tag v-else-if="row.latest.status === 'failed'" type="danger" size="small">
-                失败
-              </el-tag>
-              <el-tag v-else type="info" size="small">运行中</el-tag>
-            </template>
+            <el-tag v-if="row.last_run?.status === 'success'" type="success" size="small">
+              {{ row.last_run.row_count }} 行
+            </el-tag>
+            <el-tag v-else-if="row.last_run?.status === 'failed'" type="danger" size="small">
+              失败
+            </el-tag>
             <span v-else class="muted">未运行</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="330" fixed="right">
+        <el-table-column label="操作" width="320" fixed="right">
           <template #default="{ row }">
             <el-button
               text
@@ -246,30 +236,26 @@ async function loadCategories() {
               :icon="VideoPlay"
               :loading="runningId === row.id"
               @click="handleRun(row)"
+              >运行</el-button
             >
-              运行
-            </el-button>
             <el-button text :icon="View" @click="handlePreview(row)">预览</el-button>
             <el-button text :icon="Download" @click="handleDownload(row)">下载</el-button>
             <el-button text :icon="Edit" @click="openEdit(row)">编辑</el-button>
             <el-button text type="danger" :icon="Delete" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
-        <template #empty>
-          <el-empty description="还没有数据集，点击右上角新建" />
-        </template>
+        <template #empty><el-empty description="还没有数据集" /></template>
       </el-table>
     </el-card>
 
-    <!-- 新建 / 编辑 -->
     <el-dialog
       v-model="dialogVisible"
       :title="editingId ? '编辑数据集' : '新建数据集'"
-      width="640px"
+      width="660px"
     >
-      <el-form label-width="72px">
+      <el-form label-width="84px">
         <el-form-item label="名称" required>
-          <el-input v-model="form.name" placeholder="如：应收账款明细表" />
+          <el-input v-model="form.name" placeholder="如：应收账款明细" />
         </el-form-item>
         <el-form-item label="数据源" required>
           <el-select v-model="form.datasource" placeholder="选择数据源" style="width: 100%">
@@ -281,32 +267,24 @@ async function loadCategories() {
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="归类">
+        <el-form-item label="目标文件夹">
           <el-select
-            v-model="form.category"
-            placeholder="未归类（用户端不可见，仅管理员）"
+            v-model="form.target_folder"
+            placeholder="文件存到哪个文件夹"
             clearable
             style="width: 100%"
           >
-            <el-option
-              v-for="c in categories"
-              :key="c.id"
-              :label="`${c.department_name} / ${c.name}`"
-              :value="c.id"
-            />
+            <el-option v-for="f in folders" :key="f.id" :label="f.name" :value="f.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="说明">
-          <el-input v-model="form.description" placeholder="可选" />
-        </el-form-item>
         <el-form-item label="SQL" required>
-          <el-input
-            v-model="form.sql_text"
-            type="textarea"
-            :rows="8"
-            placeholder="仅支持只读 SELECT 查询"
-            spellcheck="false"
-          />
+          <el-input v-model="form.sql_text" type="textarea" :rows="6" placeholder="仅只读 SELECT" />
+        </el-form-item>
+        <el-form-item label="文件命名">
+          <el-input v-model="form.file_prefix" placeholder="前缀(空=任务名)" style="width: 200px" />
+          <span class="mx">_</span>
+          <el-input v-model="form.date_format" placeholder="%Y%m%d" style="width: 130px" />
+          <span class="mx">.xlsx</span>
         </el-form-item>
         <el-form-item label="定时">
           <el-radio-group v-model="schedule.type">
@@ -317,17 +295,18 @@ async function loadCategories() {
           </el-radio-group>
         </el-form-item>
         <el-form-item v-if="schedule.type === 'interval'" label=" ">
-          每
-          <el-input-number v-model="schedule.interval" :min="1" :max="10080" class="mx" />
-          分钟运行一次
+          每 <el-input-number v-model="schedule.interval" :min="1" class="mx" /> 分钟
         </el-form-item>
         <el-form-item v-else-if="schedule.type === 'daily'" label=" ">
           每天
           <el-time-picker v-model="schedule.time" format="HH:mm" value-format="HH:mm" class="mx" />
-          运行
         </el-form-item>
         <el-form-item v-else-if="schedule.type === 'cron'" label=" ">
-          <el-input v-model="schedule.cron" placeholder="分 时 日 月 周，如 0 8 * * *" />
+          <el-input v-model="schedule.cron" placeholder="0 8 * * *" />
+        </el-form-item>
+        <el-form-item label="保留">
+          最近 <el-input-number v-model="form.keep_count" :min="0" class="mx" /> 份 /
+          <el-input-number v-model="form.keep_days" :min="0" class="mx" /> 天（空=全部保留）
         </el-form-item>
       </el-form>
       <template #footer>
@@ -336,7 +315,6 @@ async function loadCategories() {
       </template>
     </el-dialog>
 
-    <!-- 数据预览 -->
     <el-dialog v-model="previewVisible" title="数据预览（前 50 行）" width="80%">
       <div v-loading="previewLoading">
         <el-table v-if="preview?.ok" :data="preview.rows" border height="420" size="small">
@@ -344,7 +322,6 @@ async function loadCategories() {
             v-for="(col, i) in preview.columns"
             :key="i"
             :label="col"
-            :prop="String(i)"
             min-width="120"
           >
             <template #default="{ row }">{{ row[i] }}</template>

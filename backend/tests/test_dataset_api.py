@@ -108,6 +108,24 @@ def test_datafile_download(manager, datasource, monkeypatch, settings, tmp_path)
     assert r.status_code == 200 and "attachment" in r["Content-Disposition"]
 
 
+def test_change_target_folder_refiles_existing(
+    manager, datasource, monkeypatch, settings, tmp_path
+):
+    """改数据集目标文件夹时，已生成的文件应一并归到新文件夹（修复"先跑后挂载看不到"）。"""
+    settings.MEDIA_ROOT = str(tmp_path)
+    folder_a = Folder.objects.create(name="A")
+    folder_b = Folder.objects.create(name="B")
+    ds = Dataset.objects.create(
+        name="d", datasource=datasource, sql_text="SELECT 1", target_folder=folder_a
+    )
+    monkeypatch.setattr(db, "stream_query", lambda *a, **k: (["x"], iter([(1,)])))
+    fid = cli(manager).post(f"/api/datasets/{ds.id}/run/").data["id"]
+    assert DataFile.objects.get(id=fid).folder_id == folder_a.id
+    # 挂到 B → 旧文件跟着过去
+    cli(manager).patch(f"/api/datasets/{ds.id}/", {"target_folder": folder_b.id}, format="json")
+    assert DataFile.objects.get(id=fid).folder_id == folder_b.id
+
+
 def test_non_manager_forbidden(db, datasource):
     u = User.objects.create_user("u", password="x")
     assert cli(u).get("/api/datasets/").status_code == 403

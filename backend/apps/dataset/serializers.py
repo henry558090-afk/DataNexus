@@ -58,3 +58,13 @@ class DatasetSerializer(serializers.ModelSerializer):
         if request is not None:
             validated_data["owner"] = request.user
         return super().create(validated_data)
+
+    def update(self, instance: Dataset, validated_data: dict) -> Dataset:
+        """目标文件夹变更时，把该数据集已有的文件一并归到新文件夹（文件跟着数据集走）。"""
+        old_folder_id = instance.target_folder_id
+        dataset = super().update(instance, validated_data)
+        if dataset.target_folder_id != old_folder_id:
+            from apps.execution.models import DataFile
+
+            DataFile.objects.filter(dataset=dataset).update(folder=dataset.target_folder)
+        return dataset

@@ -148,6 +148,10 @@ if not DEBUG:
     SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 
+# 域名 + HTTPS（走反向代理）时必须配，否则后台登录等会报 CSRF 403。
+# 例：CSRF_TRUSTED_ORIGINS=https://data.corp.com
+CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
+
 # ---- 前端发布：生产把 frontend/dist 交给 WhiteNoise，在根路径直接发页面（免 Nginx）----
 FRONTEND_DIST = BASE_DIR.parent / "frontend" / "dist"
 if FRONTEND_DIST.exists():

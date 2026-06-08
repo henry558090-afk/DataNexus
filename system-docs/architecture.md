@@ -151,7 +151,7 @@ npm run dev      # http://localhost:5179 ，/api 自动代理到后端 8000
 
 ---
 
-## 6. 部署（最小方案，详见 docs/部署.md）
+## 6. 部署（最小方案，详见 docs/部署运维手册.md）
 
 - **无 Nginx / 无 Docker / 无 PostgreSQL**。生产 = 两个进程：
   - `gunicorn config.wsgi`（一个进程同时发**前端 SPA**（WhiteNoise 发 frontend/dist）与 **/api**）；

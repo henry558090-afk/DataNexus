@@ -4,7 +4,7 @@
 > 技术栈：Django + DRF / Vue 3 + Element Plus / APScheduler / SQLite（平台元数据）/ **Oracle + MySQL**（业务数据源）。
 
 当前版本：**v0.16**（dev 分支，最小生产化）。本地访问前端 **http://localhost:5179**（后端 8010）。
-生产部署见 [docs/部署.md](docs/部署.md)：**无需 Nginx/Docker/PG**，Django 一个进程发前端+API，另一个进程跑定时。
+生产部署见 [docs/部署运维手册.md](docs/部署运维手册.md)：**无需 Nginx/Docker/PG**，Django 一个进程发前端+API，另一个进程跑定时。
 
 ---
 
@@ -77,4 +77,4 @@ cd backend
 | MySQL、首页/门户重构、定时、保留、审计、分页、安全加固 | v0.13–v0.15 | ✅ |
 | 数据分析报告（Word）/ 推送订阅 | v2 大版本 | ⬜ 规划 |
 
-> 上线（最小方案，见 [docs/部署.md](docs/部署.md)）：填生产 `.env`（重生成密钥、**FERNET_KEY 要备份**、`DEBUG=False`、`ALLOWED_HOSTS`）→ `npm run build` → `migrate`/`collectstatic`/`createsuperuser` → 起 `gunicorn` + `runscheduler` 两个进程。再提供真实 Oracle/MySQL 只读账号做端到端验证。
+> 上线（最小方案，见 [docs/部署运维手册.md](docs/部署运维手册.md)）：填生产 `.env`（重生成密钥、**FERNET_KEY 要备份**、`DEBUG=False`、`ALLOWED_HOSTS`）→ `npm run build` → `migrate`/`collectstatic`/`createsuperuser` → 起 `gunicorn` + `runscheduler` 两个进程。再提供真实 Oracle/MySQL 只读账号做端到端验证。

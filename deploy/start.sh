@@ -2,7 +2,7 @@
 # ============================================================
 # data-nexus 一键启动（Linux）—— 起两个进程：web(gunicorn) + 定时(scheduler)
 # 用法：bash deploy/start.sh
-# 可选环境变量：DN_HOST(默认0.0.0.0) DN_PORT(默认8000) DN_WORKERS(默认3)
+# 可选环境变量：DN_HOST(默认0.0.0.0) DN_PORT(默认47821 冷门端口) DN_WORKERS(默认3)
 # ============================================================
 set -euo pipefail
 
@@ -15,7 +15,7 @@ LOGDIR="$BACKEND/logs"
 RUNDIR="$BACKEND/run"
 
 HOST="${DN_HOST:-0.0.0.0}"
-PORT="${DN_PORT:-8000}"
+PORT="${DN_PORT:-47821}"
 WORKERS="${DN_WORKERS:-3}"
 
 # —— 前置检查 ——

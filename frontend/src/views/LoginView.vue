@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { Lock, User } from '@element-plus/icons-vue'
+import { ChatDotRound, Lock, User } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
+import http from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
@@ -11,6 +12,19 @@ const auth = useAuthStore()
 
 const form = reactive({ username: '', password: '' })
 const loading = ref(false)
+const wecomLoading = ref(false)
+
+async function handleWecomLogin(): Promise<void> {
+  wecomLoading.value = true
+  try {
+    const { data } = await http.get<{ url: string }>('/auth/wecom/login/')
+    window.location.href = data.url // 跳转企业微信扫码授权
+  } catch {
+    // 未启用等错误由 http 拦截器提示
+  } finally {
+    wecomLoading.value = false
+  }
+}
 
 async function handleLogin(): Promise<void> {
   if (!form.username || !form.password) {
@@ -75,6 +89,17 @@ async function handleLogin(): Promise<void> {
           登 录
         </el-button>
       </el-form>
+
+      <div class="divider"><span>或</span></div>
+      <el-button
+        size="large"
+        class="wecom"
+        :icon="ChatDotRound"
+        :loading="wecomLoading"
+        @click="handleWecomLogin"
+      >
+        企业微信登录
+      </el-button>
     </div>
 
     <p class="footer">© 2026 data-nexus · 内部数据共享平台</p>
@@ -148,6 +173,27 @@ async function handleLogin(): Promise<void> {
   letter-spacing: 2px;
   background: linear-gradient(135deg, #4f6ef7, #6b80ff);
   border: none;
+}
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0 14px;
+  color: var(--ink-3, #889);
+  font-size: 12.5px;
+}
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border, #e9edf4);
+}
+.wecom {
+  width: 100%;
+  font-weight: 550;
+  --el-button-hover-text-color: var(--accent, #4b5bd6);
+  --el-button-hover-border-color: var(--accent, #4b5bd6);
 }
 .footer {
   font-size: 12px;

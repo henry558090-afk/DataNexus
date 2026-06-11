@@ -1,5 +1,15 @@
 <script setup lang="ts">
-import { ArrowRight, Download, Folder, FolderOpened, Search, View } from '@element-plus/icons-vue'
+import {
+  ArrowRight,
+  Clock,
+  Download,
+  Folder,
+  FolderOpened,
+  Search,
+  Star,
+  StarFilled,
+  View,
+} from '@element-plus/icons-vue'
 import { computed, nextTick, onMounted, ref } from 'vue'
 
 import {
@@ -9,8 +19,12 @@ import {
   downloadFile,
   getFolderFiles,
   getTree,
+  getUpdates,
+  listFavorites,
   previewFile,
+  recentDownloads,
   searchFiles,
+  toggleFavorite,
 } from '@/api/portal'
 
 const loadingTree = ref(false)
@@ -23,6 +37,37 @@ const keyword = ref('')
 const searching = ref(false)
 const sortBy = ref<'time' | 'name'>('time')
 const downloadingId = ref<number | null>(null)
+
+// ---- v0.24 收藏 / 更新 / 最近下载 ----
+const favorites = ref<{ folder_id: number; name: string }[]>([])
+const favSet = computed(() => new Set(favorites.value.map((f) => f.folder_id)))
+const updatesCount = ref(0)
+const recent = ref<{ target: string; created_at: string }[]>([])
+const LAST_SEEN_KEY = 'portal_last_seen'
+
+async function loadFavorites() {
+  favorites.value = (await listFavorites()).data
+}
+async function onToggleFavorite(folderId: number) {
+  const { data } = await toggleFavorite(folderId)
+  if (data.favorited) {
+    const name = findPath(tree.value, folderId)?.slice(-1)[0] ?? '文件夹'
+    favorites.value.push({ folder_id: folderId, name })
+  } else {
+    favorites.value = favorites.value.filter((f) => f.folder_id !== folderId)
+  }
+}
+async function loadUpdates() {
+  const since = localStorage.getItem(LAST_SEEN_KEY) || undefined
+  updatesCount.value = (await getUpdates(since)).data.count
+}
+function markSeen() {
+  localStorage.setItem(LAST_SEEN_KEY, new Date().toISOString())
+  updatesCount.value = 0
+}
+async function loadRecent() {
+  recent.value = (await recentDownloads()).data
+}
 
 const sortedFiles = computed(() => {
   const arr = [...files.value]
@@ -99,6 +144,7 @@ async function handleDownload(f: PortalFile) {
   downloadingId.value = f.id
   try {
     await downloadFile(f.id, f.name)
+    loadRecent() // 刷新最近下载
   } finally {
     downloadingId.value = null
   }
@@ -133,7 +179,17 @@ async function downloadFromPreview() {
   await downloadFile(f.id, f.name, cols)
 }
 
-onMounted(loadTree)
+onMounted(async () => {
+  await loadTree()
+  // 次要数据并行加载，失败不影响主界面
+  Promise.allSettled([loadFavorites(), loadUpdates(), loadRecent()])
+})
+
+// 收藏夹快捷选择：按 folder_id 选中
+async function onSelectFolderById(folderId: number) {
+  const name = findPath(tree.value, folderId)?.slice(-1)[0] ?? '文件夹'
+  await onSelectFolder({ id: folderId, name, children: [] })
+}
 </script>
 
 <template>
@@ -162,6 +218,22 @@ onMounted(loadTree)
     <div class="explorer">
       <!-- 左：文件夹树 -->
       <aside class="tree-pane">
+        <div v-if="favorites.length" class="fav-zone">
+          <div class="pane-head">
+            <el-icon class="fav-star"><StarFilled /></el-icon> 我的收藏
+          </div>
+          <div class="fav-chips">
+            <button
+              v-for="f in favorites"
+              :key="f.folder_id"
+              class="fav-chip"
+              :class="{ on: currentFolderId === f.folder_id }"
+              @click="onSelectFolderById(f.folder_id)"
+            >
+              {{ f.name }}
+            </button>
+          </div>
+        </div>
         <div class="pane-head">数据目录</div>
         <div v-if="loadingTree" class="tree-skeleton">
           <div
@@ -189,6 +261,14 @@ onMounted(loadTree)
                 <Folder v-else />
               </el-icon>
               <span class="tnode-label">{{ data.name }}</span>
+              <button
+                class="tnode-star"
+                :class="{ on: favSet.has(data.id) }"
+                :title="favSet.has(data.id) ? '取消收藏' : '收藏'"
+                @click.stop="onToggleFavorite(data.id)"
+              >
+                <el-icon><StarFilled v-if="favSet.has(data.id)" /><Star v-else /></el-icon>
+              </button>
             </span>
           </template>
         </el-tree>
@@ -196,6 +276,16 @@ onMounted(loadTree)
           <el-icon :size="26"><Folder /></el-icon>
           <p>还没有授权给你的目录</p>
           <span>请联系管理员开通</span>
+        </div>
+
+        <div v-if="recent.length" class="recent-zone">
+          <div class="pane-head"><el-icon><Clock /></el-icon> 最近下载</div>
+          <ul class="recent-list">
+            <li v-for="(r, i) in recent.slice(0, 5)" :key="i" :title="r.target">
+              <el-icon class="rz-ic"><Download /></el-icon>
+              <span class="rz-name">{{ r.target }}</span>
+            </li>
+          </ul>
         </div>
       </aside>
 
@@ -219,6 +309,9 @@ onMounted(loadTree)
             <span v-else class="crumb-hint">从左侧选择一个文件夹</span>
           </nav>
           <div class="file-tools">
+            <button v-if="updatesCount" class="updates-pill" title="标记为已读" @click="markSeen">
+              <span class="dot-live" /> {{ updatesCount }} 个新文件
+            </button>
             <span v-if="sortedFiles.length" class="file-count"
               >{{ sortedFiles.length }} 个文件</span
             >
@@ -456,11 +549,140 @@ onMounted(loadTree)
   flex-shrink: 0;
 }
 .tnode-label {
+  flex: 1;
   font-size: 14px;
   color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.tnode-star {
+  display: flex;
+  align-items: center;
+  border: none;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  padding: 2px;
+  opacity: 0;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+.tree-pane :deep(.el-tree-node__content:hover) .tnode-star,
+.tnode-star.on {
+  opacity: 1;
+}
+.tnode-star.on {
+  color: #f0a020;
+}
+.tnode-star:hover {
+  color: #f0a020;
+}
+/* 收藏快捷区 */
+.fav-zone {
+  margin-bottom: 6px;
+}
+.fav-star {
+  color: #f0a020;
+  vertical-align: -2px;
+}
+.fav-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 4px 12px;
+}
+.fav-chip {
+  max-width: 100%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 12.5px;
+  padding: 4px 10px;
+  border-radius: var(--r-full);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.fav-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.fav-chip.on {
+  background: var(--accent-weak);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+/* 最近下载 */
+.recent-zone {
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+.recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.recent-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.rz-ic {
+  color: var(--ink-3);
+  flex-shrink: 0;
+}
+.rz-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 更新提示 */
+.updates-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--accent);
+  background: var(--accent-weak);
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: var(--r-full);
+  cursor: pointer;
+}
+.dot-live {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 1.8s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dot-live {
+    animation: none;
+  }
 }
 .pane-empty {
   text-align: center;

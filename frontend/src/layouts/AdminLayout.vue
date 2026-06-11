@@ -8,6 +8,7 @@ import {
   Lock,
   List,
   OfficeBuilding,
+  Stamp,
   SwitchButton,
   User as UserIcon,
 } from '@element-plus/icons-vue'
@@ -38,6 +39,7 @@ const groups = [
     label: '权限',
     items: [
       { index: '/admin/permission', title: '权限管理', icon: Lock },
+      { index: '/admin/approvals', title: '审批中心', icon: Stamp },
       { index: '/admin/departments', title: '部门管理', icon: OfficeBuilding },
       { index: '/admin/users', title: '人员管理', icon: UserIcon },
     ],
@@ -45,8 +47,8 @@ const groups = [
   { label: '系统', items: [{ index: '/admin/audit', title: '审计日志', icon: List }] },
 ]
 
-function handleLogout(): void {
-  auth.logout()
+async function handleLogout(): Promise<void> {
+  await auth.logout()
   router.push({ name: 'login' })
 }
 </script>

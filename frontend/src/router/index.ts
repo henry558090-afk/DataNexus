@@ -65,6 +65,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '人员管理' },
       },
       {
+        path: 'approvals',
+        name: 'admin-approvals',
+        component: () => import('@/views/admin/AccessRequestView.vue'),
+        meta: { title: '审批中心' },
+      },
+      {
         path: 'audit',
         name: 'admin-audit',
         component: () => import('@/views/admin/AuditView.vue'),
@@ -95,6 +101,13 @@ const router = createRouter({
 
 // 守卫：登录校验 + 角色分流
 router.beforeEach(async (to) => {
+  // 企业微信 SSO 回调：URL 带 ?token=xxx → 存下并清理地址栏
+  if (typeof to.query.token === 'string' && to.query.token) {
+    localStorage.setItem('token', to.query.token)
+    const rest = { ...to.query }
+    delete rest.token
+    return { path: to.path, query: rest, replace: true }
+  }
   const token = localStorage.getItem('token')
   if (!to.meta.public && !token) {
     return { name: 'login' }

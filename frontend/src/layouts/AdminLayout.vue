@@ -47,8 +47,8 @@ const groups = [
   { label: '系统', items: [{ index: '/admin/audit', title: '审计日志', icon: List }] },
 ]
 
-async function handleLogout(): Promise<void> {
-  await auth.logout()
+function handleLogout(): void {
+  auth.logout()
   router.push({ name: 'login' })
 }
 </script>

@@ -37,17 +37,19 @@ export const useAuthStore = defineStore('auth', () => {
     return data
   }
 
-  async function logout(): Promise<void> {
-    // 先让服务端 Token 失效（SEC2），失败也继续清本地，保证一定能登出
-    try {
-      await http.post('/auth/logout/')
-    } catch {
-      /* 忽略：网络/已过期都不影响本地登出 */
-    }
+  function logout(): void {
+    // 先同步清本地登录态，保证调用后路由守卫立刻判定为"未登录"（修复需点两次）
+    const t = token.value || localStorage.getItem('token')
     token.value = ''
     profile.value = null
     localStorage.removeItem('token')
     localStorage.removeItem('username')
+    // 再后台让服务端 Token 失效（SEC2）：本地已清，需显式带上原 token；失败不影响登出
+    if (t) {
+      http
+        .post('/auth/logout/', null, { headers: { Authorization: `Token ${t}` } })
+        .catch(() => {})
+    }
   }
 
   return { token, profile, username, isManager, login, fetchProfile, logout }

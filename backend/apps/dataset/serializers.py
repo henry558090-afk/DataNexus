@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from apps.dataset.models import Dataset, Subscription
+from apps.dataset.models import Dataset, MaskingRule, Subscription
 from core.sql_guard import SqlNotAllowed, validate_readonly_sql
 
 
@@ -10,6 +10,13 @@ class SubscriptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subscription
         fields = ["id", "dataset", "dataset_name", "channel", "target", "is_active", "created_at"]
+        read_only_fields = ["id", "created_at"]
+
+
+class MaskingRuleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MaskingRule
+        fields = ["id", "dataset", "column", "strategy", "created_at"]
         read_only_fields = ["id", "created_at"]
 
 

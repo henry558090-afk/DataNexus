@@ -20,6 +20,24 @@ from apps.permission.services import can_view_file, can_view_folder, visible_fol
 from core import excel
 
 
+def _should_see_raw(user, dataset) -> bool:
+    """管理员/超管/老板 或 数据集属主 → 看原值；其余普通用户 → 脱敏（v0.27）。"""
+    if dataset is None:
+        return True
+    from apps.permission.services import _is_global
+
+    return _is_global(user) or dataset.owner_id == getattr(user, "id", None)
+
+
+def _masking_for(user, dataset) -> dict:
+    """该用户在该数据集下生效的脱敏规则（看原值则为空）。"""
+    if _should_see_raw(user, dataset):
+        return {}
+    from apps.dataset.masking import rules_for
+
+    return rules_for(dataset)
+
+
 def _file_brief(f: DataFile) -> dict:
     return {
         "id": f.id,
@@ -101,6 +119,11 @@ def portal_file_preview(request: Request, pk: int) -> Response:
     except (TypeError, ValueError):
         limit = 50
     columns, rows = excel.read_xlsx(datafile.file_path, limit=limit)
+    rules = _masking_for(request.user, datafile.dataset)
+    if rules:
+        from apps.dataset.masking import mask_rows
+
+        rows = mask_rows(columns, rows, rules)
     return Response({"columns": columns, "rows": rows})
 
 
@@ -202,14 +225,19 @@ def portal_download(request: Request, pk: int):
         return Response({"detail": "文件不存在"}, status=404)
     log("download", request=request, target=datafile.name)
 
-    # 选列下载（v0.24）：?columns=a,b → 现生成只含这些列的文件
+    # 选列下载（v0.24）：?columns=a,b；列级脱敏（v0.27）：普通用户对脱敏列遮蔽
     cols_param = (request.query_params.get("columns") or "").strip()
-    if cols_param:
-        wanted = [c for c in cols_param.split(",") if c]
+    wanted = [c for c in cols_param.split(",") if c] if cols_param else None
+    rules = _masking_for(request.user, datafile.dataset)
+
+    if wanted or rules:
         columns, rows = excel.read_xlsx(datafile.file_path, columns=wanted)
+        if rules:
+            from apps.dataset.masking import mask_rows
+
+            rows = mask_rows(columns, rows, rules)
         tmp = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
         tmp.close()
         excel.export_to_xlsx(columns, rows, tmp.name)
-        resp = FileResponse(open(tmp.name, "rb"), as_attachment=True, filename=datafile.name)
-        return resp
+        return FileResponse(open(tmp.name, "rb"), as_attachment=True, filename=datafile.name)
     return FileResponse(open(datafile.file_path, "rb"), as_attachment=True, filename=datafile.name)

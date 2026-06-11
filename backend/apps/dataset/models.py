@@ -65,6 +65,31 @@ class Dataset(models.Model):
         return f"{prefix}_{stamp}.xlsx"
 
 
+class MaskingRule(models.Model):
+    """列级脱敏规则（v0.27）：普通用户预览/下载时，对指定列脱敏；管理员/属主看原值。"""
+
+    class Strategy(models.TextChoices):
+        FULL = "full", "全部遮蔽"
+        PARTIAL = "partial", "部分遮蔽（保留首尾）"
+
+    dataset = models.ForeignKey(
+        Dataset, on_delete=models.CASCADE, related_name="masking_rules", verbose_name="数据集"
+    )
+    column = models.CharField("列名", max_length=150)
+    strategy = models.CharField(
+        "策略", max_length=20, choices=Strategy.choices, default=Strategy.PARTIAL
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [("dataset", "column")]
+        verbose_name = "脱敏规则"
+        verbose_name_plural = "脱敏规则"
+
+    def __str__(self) -> str:
+        return f"{self.dataset_id}:{self.column}:{self.strategy}"
+
+
 class Subscription(models.Model):
     """数据集运行成功后的推送订阅（v0.25）：邮件 或 Webhook（钉钉/企业微信机器人）。"""
 

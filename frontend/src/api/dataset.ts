@@ -149,3 +149,33 @@ export function approveAccessRequest(id: number) {
 export function rejectAccessRequest(id: number) {
   return http.post(`/access-requests/${id}/reject/`)
 }
+
+// ---- v0.27 列级脱敏 ----
+export interface MaskingRule {
+  id: number
+  dataset: number
+  column: string
+  strategy: 'full' | 'partial'
+  created_at: string
+}
+export function listMaskingRules(dataset?: number) {
+  return http.get<MaskingRule[]>('/masking-rules/', { params: { dataset } })
+}
+export function createMaskingRule(data: { dataset: number; column: string; strategy: string }) {
+  return http.post<MaskingRule>('/masking-rules/', data)
+}
+export function deleteMaskingRule(id: number) {
+  return http.delete(`/masking-rules/${id}/`)
+}
+
+// ---- v0.27 审计可视化 ----
+export interface AuditStats {
+  days: number
+  total: number
+  by_action: { action: string; count: number }[]
+  by_day: { day: string; count: number }[]
+  top_users: { username: string; count: number }[]
+}
+export function getAuditStats(days = 30) {
+  return http.get<AuditStats>('/audit-logs/stats/', { params: { days } })
+}

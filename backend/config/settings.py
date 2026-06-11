@@ -166,6 +166,17 @@ PLATFORM_BASE_URL = env("PLATFORM_BASE_URL", default="")
 # Webhook 推送超时秒
 WEBHOOK_TIMEOUT_SECONDS = env.int("WEBHOOK_TIMEOUT_SECONDS", default=10)
 
+# ---- 企业微信 SSO（v0.27，可选）----
+# 填好 CORP_ID/AGENT_ID/SECRET 即启用；不填则相关接口返回未启用。
+WECOM_ENABLED = env.bool("WECOM_ENABLED", default=False)
+WECOM_CORP_ID = env("WECOM_CORP_ID", default="")
+WECOM_AGENT_ID = env("WECOM_AGENT_ID", default="")
+WECOM_SECRET = env("WECOM_SECRET", default="")
+# 扫码登录回调后，带 token 跳转到的前端地址
+WECOM_REDIRECT_FRONTEND = env("WECOM_REDIRECT_FRONTEND", default="/")
+# 首次登录是否自动创建本地用户（用企微 userid 作为用户名）
+WECOM_AUTO_PROVISION = env.bool("WECOM_AUTO_PROVISION", default=True)
+
 # ---- 安全加固 ----
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"

@@ -9,8 +9,12 @@ from rest_framework.response import Response
 
 from apps.accounts.permissions import IsManager
 from apps.dataset import services
-from apps.dataset.models import Dataset, Subscription
-from apps.dataset.serializers import DatasetSerializer, SubscriptionSerializer
+from apps.dataset.models import Dataset, MaskingRule, Subscription
+from apps.dataset.serializers import (
+    DatasetSerializer,
+    MaskingRuleSerializer,
+    SubscriptionSerializer,
+)
 from apps.execution.models import DataFile
 from apps.execution.serializers import DataFileSerializer
 
@@ -183,6 +187,21 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
 
     queryset = Subscription.objects.select_related("dataset").all()
     serializer_class = SubscriptionSerializer
+    permission_classes = [IsManager]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        dataset_id = self.request.query_params.get("dataset")
+        if dataset_id:
+            qs = qs.filter(dataset_id=dataset_id)
+        return qs
+
+
+class MaskingRuleViewSet(viewsets.ModelViewSet):
+    """列级脱敏规则（仅管理员，v0.27）：CRUD。?dataset 过滤。"""
+
+    queryset = MaskingRule.objects.select_related("dataset").all()
+    serializer_class = MaskingRuleSerializer
     permission_classes = [IsManager]
 
     def get_queryset(self):

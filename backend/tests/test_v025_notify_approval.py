@@ -108,8 +108,8 @@ def test_subscription_crud_manager_only(manager, datasource, db):
 # ---------- 审批流 ----------
 def test_access_request_flow(manager, datasource, db):
     user = User.objects.create_user("alice", password="x")
-    folder = Folder.objects.create(name="财务密")
-    # 用户申请（当前不可见）
+    folder = Folder.objects.create(name="公开月报", requestable=True)
+    # 用户申请（当前不可见、且开放申请）
     r = cli(user).post(
         "/api/portal/access-requests/", {"folder": folder.id, "reason": "对账需要"}, format="json"
     )
@@ -134,7 +134,7 @@ def test_access_request_reject(manager, db):
 
 def test_access_request_duplicate_returns_existing(db):
     user = User.objects.create_user("carl", password="x")
-    folder = Folder.objects.create(name="Y")
+    folder = Folder.objects.create(name="Y", requestable=True)
     c = cli(user)
     r1 = c.post("/api/portal/access-requests/", {"folder": folder.id}, format="json")
     r2 = c.post("/api/portal/access-requests/", {"folder": folder.id}, format="json")

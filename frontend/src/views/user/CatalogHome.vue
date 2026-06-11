@@ -5,11 +5,13 @@ import {
   Download,
   Folder,
   FolderOpened,
+  Plus,
   Search,
   Star,
   StarFilled,
   View,
 } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import { computed, nextTick, onMounted, ref } from 'vue'
 
 import {
@@ -23,6 +25,8 @@ import {
   listFavorites,
   previewFile,
   recentDownloads,
+  requestAccess,
+  requestableFolders,
   searchFiles,
   toggleFavorite,
 } from '@/api/portal'
@@ -67,6 +71,25 @@ function markSeen() {
 }
 async function loadRecent() {
   recent.value = (await recentDownloads()).data
+}
+
+// ---- 申请访问其他目录（审批闭环）----
+const requestable = ref<{ id: number; name: string; pending: boolean }[]>([])
+const requestVisible = ref(false)
+const requestingId = ref<number | null>(null)
+async function loadRequestable() {
+  requestable.value = (await requestableFolders()).data
+}
+async function submitRequest(folderId: number) {
+  requestingId.value = folderId
+  try {
+    await requestAccess(folderId)
+    const item = requestable.value.find((f) => f.id === folderId)
+    if (item) item.pending = true
+    ElMessage.success('已提交申请，等待管理员审批')
+  } finally {
+    requestingId.value = null
+  }
 }
 
 const sortedFiles = computed(() => {
@@ -182,7 +205,7 @@ async function downloadFromPreview() {
 onMounted(async () => {
   await loadTree()
   // 次要数据并行加载，失败不影响主界面
-  Promise.allSettled([loadFavorites(), loadUpdates(), loadRecent()])
+  Promise.allSettled([loadFavorites(), loadUpdates(), loadRecent(), loadRequestable()])
 })
 
 // 收藏夹快捷选择：按 folder_id 选中
@@ -287,6 +310,10 @@ async function onSelectFolderById(folderId: number) {
             </li>
           </ul>
         </div>
+
+        <button v-if="requestable.length" class="request-entry" @click="requestVisible = true">
+          <el-icon><Plus /></el-icon> 申请访问其他目录
+        </button>
       </aside>
 
       <!-- 右：文件列表 -->
@@ -437,6 +464,27 @@ async function onSelectFolderById(folderId: number) {
           </el-table-column>
         </el-table>
       </div>
+    </el-dialog>
+
+    <!-- 申请访问其他目录 -->
+    <el-dialog v-model="requestVisible" title="申请访问其他目录" width="460px">
+      <p class="req-hint">以下是开放申请的目录。提交后由管理员审批，通过即可访问。</p>
+      <ul class="req-list">
+        <li v-for="f in requestable" :key="f.id">
+          <el-icon class="req-ic"><Folder /></el-icon>
+          <span class="req-name">{{ f.name }}</span>
+          <el-tag v-if="f.pending" type="warning" size="small">待审批</el-tag>
+          <el-button
+            v-else
+            size="small"
+            type="primary"
+            :loading="requestingId === f.id"
+            @click="submitRequest(f.id)"
+            >申请</el-button
+          >
+        </li>
+        <li v-if="!requestable.length" class="req-empty">没有可申请的目录</li>
+      </ul>
     </el-dialog>
   </div>
 </template>
@@ -648,6 +696,62 @@ async function onSelectFolderById(folderId: number) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* 申请访问入口 */
+.request-entry {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 14px;
+  padding: 9px;
+  border: 1px dashed var(--border-strong, #d8deea);
+  background: transparent;
+  color: var(--ink-2, #565f70);
+  font-size: 13px;
+  border-radius: var(--r-sm, 8px);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.request-entry:hover {
+  border-color: var(--accent, #4b5bd6);
+  color: var(--accent, #4b5bd6);
+  background: var(--accent-weak, #eef0fc);
+}
+.req-hint {
+  font-size: 12.5px;
+  color: var(--ink-3, #889);
+  margin: 0 0 14px;
+}
+.req-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.req-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--border, #e9edf4);
+  border-radius: var(--r-sm, 8px);
+}
+.req-ic {
+  color: var(--accent, #4b5bd6);
+}
+.req-name {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 550;
+}
+.req-empty {
+  justify-content: center;
+  color: var(--ink-3, #889);
+  border-style: dashed !important;
 }
 /* 更新提示 */
 .updates-pill {

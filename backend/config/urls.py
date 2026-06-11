@@ -123,6 +123,11 @@ urlpatterns = [
     ),
     path("api/portal/updates/", portal.portal_updates, name="portal-updates"),
     path(
+        "api/portal/requestable-folders/",
+        portal.portal_requestable_folders,
+        name="portal-requestable-folders",
+    ),
+    path(
         "api/portal/access-requests/", portal.portal_access_requests, name="portal-access-requests"
     ),
     # 前端单页：放最后，排除 api/django-admin/static/media（/admin/* 留给前端）

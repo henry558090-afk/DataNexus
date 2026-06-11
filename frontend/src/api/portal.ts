@@ -66,3 +66,9 @@ export function myAccessRequests() {
 export function requestAccess(folderId: number, reason?: string) {
   return http.post('/portal/access-requests/', { folder: folderId, reason })
 }
+// 可申请的目录（标记为 requestable 且当前看不到的）
+export function requestableFolders() {
+  return http.get<{ id: number; name: string; pending: boolean }[]>(
+    '/portal/requestable-folders/',
+  )
+}

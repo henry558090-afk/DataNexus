@@ -11,6 +11,7 @@ interface TreeNode {
   id: number
   name: string
   parent: number | null
+  requestable: boolean
   children: TreeNode[]
 }
 
@@ -30,7 +31,15 @@ const mountable = computed(() =>
 
 function buildTree(flat: Folder[]): TreeNode[] {
   const map = new Map<number, TreeNode>()
-  flat.forEach((f) => map.set(f.id, { id: f.id, name: f.name, parent: f.parent, children: [] }))
+  flat.forEach((f) =>
+    map.set(f.id, {
+      id: f.id,
+      name: f.name,
+      parent: f.parent,
+      requestable: f.requestable,
+      children: [],
+    }),
+  )
   const roots: TreeNode[] = []
   map.forEach((n) => {
     if (n.parent && map.has(n.parent)) map.get(n.parent)!.children.push(n)
@@ -123,6 +132,12 @@ async function unmount(d: Dataset) {
   ElMessage.success('已取消挂载')
 }
 
+async function toggleRequestable(node: TreeNode, value: boolean) {
+  await updateFolder(node.id, { requestable: value })
+  node.requestable = value
+  ElMessage.success(value ? '已开放申请：无权限用户可见名并申请' : '已关闭申请')
+}
+
 onMounted(load)
 </script>
 
@@ -172,9 +187,21 @@ onMounted(load)
               ><el-icon class="fi"><FolderOpened /></el-icon><strong>{{ selected.name }}</strong> ·
               挂载的数据集</span
             >
-            <el-button type="primary" :icon="Plus" @click="mountVisible = true"
-              >挂载数据集</el-button
-            >
+            <div class="d-head-right">
+              <span class="req-switch">
+                <el-switch
+                  :model-value="selected.requestable"
+                  size="small"
+                  @update:model-value="toggleRequestable(selected, $event as boolean)"
+                />
+                <span class="req-label" title="开启后，无权限用户可在门户看到此目录名并发起访问申请">
+                  可被申请
+                </span>
+              </span>
+              <el-button type="primary" :icon="Plus" @click="mountVisible = true"
+                >挂载数据集</el-button
+              >
+            </div>
           </div>
           <div class="d-body">
             <div v-for="d in mounted" :key="d.id" class="ds rise-in">
@@ -250,6 +277,21 @@ onMounted(load)
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+.d-head-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.req-switch {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.req-label {
+  font-size: 13px;
+  color: var(--ink-2);
+  cursor: default;
 }
 .tree-pane {
   padding-bottom: 10px;

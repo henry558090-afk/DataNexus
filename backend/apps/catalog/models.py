@@ -31,6 +31,9 @@ class Folder(models.Model):
         verbose_name="上级文件夹",
     )
     order = models.IntegerField("排序", default=0)
+    # 是否允许无权限用户在门户里看到此目录名并发起访问申请（v0.27 审批闭环）。
+    # 默认 False：未标记的目录对无权限用户完全不可见、不可申请。
+    requestable = models.BooleanField("可被申请", default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

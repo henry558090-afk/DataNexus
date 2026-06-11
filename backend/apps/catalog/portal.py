@@ -169,10 +169,38 @@ def portal_recent_downloads(request: Request) -> Response:
     return Response([{"target": log.target, "created_at": log.created_at} for log in logs])
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def portal_requestable_folders(request: Request) -> Response:
+    """可申请的目录（v0.27 闭环）：标记为 requestable、且用户当前看不到的目录。
+
+    只返回名字（不暴露内容），并附带该用户对此目录是否已有待审批申请。
+    敏感目录（requestable=False）完全不出现。
+    """
+    from apps.permission.models import AccessRequest
+
+    visible_ids = set(visible_folders(request.user).values_list("id", flat=True))
+    candidates = Folder.objects.filter(requestable=True).exclude(id__in=visible_ids)
+    pending_ids = set(
+        AccessRequest.objects.filter(
+            user=request.user, status=AccessRequest.Status.PENDING
+        ).values_list("folder_id", flat=True)
+    )
+    return Response(
+        [
+            {"id": f.id, "name": f.name, "pending": f.id in pending_ids}
+            for f in candidates.order_by("name")
+        ]
+    )
+
+
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
 def portal_access_requests(request: Request):
-    """用户的访问申请（v0.25）：GET 列出自己的；POST 提交对某文件夹的申请。"""
+    """用户的访问申请（v0.25）：GET 列出自己的；POST 提交对某文件夹的申请。
+
+    POST 仅允许申请**标记为可申请**且当前不可见的目录，避免越权探测敏感目录。
+    """
     from apps.permission.models import AccessRequest
     from apps.permission.serializers import AccessRequestSerializer
 
@@ -184,6 +212,8 @@ def portal_access_requests(request: Request):
     folder = get_object_or_404(Folder, pk=folder_id)
     if can_view_folder(request.user, folder):
         return Response({"detail": "你已可访问该文件夹"}, status=400)
+    if not folder.requestable:
+        return Response({"detail": "该目录不开放申请"}, status=403)
     existing = AccessRequest.objects.filter(
         user=request.user, folder=folder, status=AccessRequest.Status.PENDING
     ).first()

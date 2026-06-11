@@ -5,6 +5,7 @@ export interface Folder {
   name: string
   parent: number | null
   order: number
+  requestable: boolean
   created_at: string
 }
 
@@ -14,7 +15,10 @@ export function listFolders() {
 export function createFolder(name: string, parent: number | null) {
   return http.post<Folder>('/folders/', { name, parent })
 }
-export function updateFolder(id: number, data: Partial<{ name: string; parent: number | null }>) {
+export function updateFolder(
+  id: number,
+  data: Partial<{ name: string; parent: number | null; requestable: boolean }>,
+) {
   return http.patch<Folder>(`/folders/${id}/`, data)
 }
 export function deleteFolder(id: number) {

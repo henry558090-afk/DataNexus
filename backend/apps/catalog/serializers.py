@@ -13,7 +13,7 @@ class DepartmentSerializer(serializers.ModelSerializer):
 class FolderSerializer(serializers.ModelSerializer):
     class Meta:
         model = Folder
-        fields = ["id", "name", "parent", "order", "created_at"]
+        fields = ["id", "name", "parent", "order", "requestable", "created_at"]
         read_only_fields = ["id", "created_at"]
 
     def validate_parent(self, value):

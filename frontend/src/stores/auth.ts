@@ -44,10 +44,14 @@ export const useAuthStore = defineStore('auth', () => {
     profile.value = null
     localStorage.removeItem('token')
     localStorage.removeItem('username')
-    // 再后台让服务端 Token 失效（SEC2）：本地已清，需显式带上原 token；失败不影响登出
+    // 再后台让服务端 Token 失效（SEC2）：本地已清，需显式带上原 token。
+    // silent：登出是丢弃会话，后台请求即使 401（token 已失效）也不弹错、不跳转。
     if (t) {
       http
-        .post('/auth/logout/', null, { headers: { Authorization: `Token ${t}` } })
+        .post('/auth/logout/', null, {
+          headers: { Authorization: `Token ${t}` },
+          silent: true,
+        })
         .catch(() => {})
     }
   }

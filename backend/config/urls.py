@@ -98,6 +98,19 @@ urlpatterns = [
     ),
     path("api/portal/search/", portal.portal_search, name="portal-search"),
     path("api/portal/files/<int:pk>/download/", portal.portal_download, name="portal-download"),
+    path("api/portal/files/<int:pk>/preview/", portal.portal_file_preview, name="portal-preview"),
+    path("api/portal/favorites/", portal.portal_favorites, name="portal-favorites"),
+    path(
+        "api/portal/folders/<int:pk>/favorite/",
+        portal.portal_toggle_favorite,
+        name="portal-toggle-favorite",
+    ),
+    path(
+        "api/portal/recent-downloads/",
+        portal.portal_recent_downloads,
+        name="portal-recent-downloads",
+    ),
+    path("api/portal/updates/", portal.portal_updates, name="portal-updates"),
     # 前端单页：放最后，排除 api/django-admin/static/media（/admin/* 留给前端）
     re_path(r"^(?!api/|django-admin/|static/|media/).*$", spa, name="spa"),
 ]

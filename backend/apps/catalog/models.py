@@ -59,6 +59,21 @@ class Folder(models.Model):
         return ids
 
 
+class Favorite(models.Model):
+    """用户收藏的文件夹（v0.24）。"""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="favorites"
+    )
+    folder = models.ForeignKey(Folder, on_delete=models.CASCADE, related_name="favorited_by")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [("user", "folder")]
+        verbose_name = "收藏"
+        verbose_name_plural = "收藏"
+
+
 class FolderShare(models.Model):
     """文件夹授权：把某文件夹分享给【部门】或【个人】，递归覆盖其子文件夹/文件。"""
 

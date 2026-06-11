@@ -23,16 +23,38 @@ export function getFolderFiles(folderId: number) {
   return http.get<PortalFile[]>(`/portal/folders/${folderId}/files/`)
 }
 
-export function searchFiles(q: string) {
-  return http.get<PortalFile[]>('/portal/search/', { params: { q } })
+export function searchFiles(q: string, from?: string, to?: string) {
+  return http.get<PortalFile[]>('/portal/search/', { params: { q, from, to } })
 }
 
-export async function downloadFile(id: number, filename: string) {
-  const resp = await http.get(`/portal/files/${id}/download/`, { responseType: 'blob' })
+export async function downloadFile(id: number, filename: string, columns?: string[]) {
+  const params = columns?.length ? { columns: columns.join(',') } : undefined
+  const resp = await http.get(`/portal/files/${id}/download/`, { responseType: 'blob', params })
   const url = URL.createObjectURL(resp.data as Blob)
   const a = document.createElement('a')
   a.href = url
   a.download = filename
   a.click()
   URL.revokeObjectURL(url)
+}
+
+// ---- v0.24 ----
+export interface PreviewData {
+  columns: string[]
+  rows: unknown[][]
+}
+export function previewFile(id: number, limit = 50) {
+  return http.get<PreviewData>(`/portal/files/${id}/preview/`, { params: { limit } })
+}
+export function listFavorites() {
+  return http.get<{ folder_id: number; name: string }[]>('/portal/favorites/')
+}
+export function toggleFavorite(folderId: number) {
+  return http.post<{ favorited: boolean }>(`/portal/folders/${folderId}/favorite/`)
+}
+export function recentDownloads() {
+  return http.get<{ target: string; created_at: string }[]>('/portal/recent-downloads/')
+}
+export function getUpdates(since?: string) {
+  return http.get<{ count: number; files: PortalFile[] }>('/portal/updates/', { params: { since } })
 }

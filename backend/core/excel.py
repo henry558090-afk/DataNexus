@@ -26,6 +26,41 @@ def _sanitize(value: object) -> object:
     return value
 
 
+def read_xlsx(
+    path: str | Path, *, limit: int | None = None, columns: list[str] | None = None
+) -> tuple[list[str], list[list[object]]]:
+    """流式读回 xlsx（read_only）：返回 (列名, 行)。
+
+    :param limit: 最多读取的数据行数（None=全部）。用于在线预览。
+    :param columns: 只取这些列（按表头名，保持给定顺序）；None=全部列。用于选列下载。
+    """
+    from openpyxl import load_workbook
+
+    wb = load_workbook(str(path), read_only=True, data_only=True)
+    try:
+        ws = wb.active
+        rows_iter = ws.iter_rows(values_only=True)
+        try:
+            header = list(next(rows_iter))
+        except StopIteration:
+            return [], []
+        header = ["" if h is None else str(h) for h in header]
+        if columns:
+            idx = [header.index(c) for c in columns if c in header]
+            out_header = [header[i] for i in idx]
+        else:
+            idx = list(range(len(header)))
+            out_header = header
+        out_rows: list[list[object]] = []
+        for n, row in enumerate(rows_iter):
+            if limit is not None and n >= limit:
+                break
+            out_rows.append([row[i] if i < len(row) else None for i in idx])
+        return out_header, out_rows
+    finally:
+        wb.close()
+
+
 def export_to_xlsx(
     columns: Sequence[str],
     rows: Iterable[Sequence[object]],

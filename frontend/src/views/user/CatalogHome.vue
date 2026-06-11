@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { ArrowRight, Download, Folder, FolderOpened, Search } from '@element-plus/icons-vue'
+import { ArrowRight, Download, Folder, FolderOpened, Search, View } from '@element-plus/icons-vue'
 import { computed, nextTick, onMounted, ref } from 'vue'
 
 import {
   type PortalFile,
   type PortalFolder,
+  type PreviewData,
   downloadFile,
   getFolderFiles,
   getTree,
+  previewFile,
   searchFiles,
 } from '@/api/portal'
 
@@ -100,6 +102,35 @@ async function handleDownload(f: PortalFile) {
   } finally {
     downloadingId.value = null
   }
+}
+
+// ---- v0.24 在线预览 + 选列下载 ----
+const previewVisible = ref(false)
+const previewLoading = ref(false)
+const previewData = ref<PreviewData | null>(null)
+const previewFileRef = ref<PortalFile | null>(null)
+const selectedCols = ref<string[]>([])
+
+async function openPreview(f: PortalFile) {
+  previewFileRef.value = f
+  previewVisible.value = true
+  previewLoading.value = true
+  previewData.value = null
+  try {
+    const { data } = await previewFile(f.id, 50)
+    previewData.value = data
+    selectedCols.value = [...data.columns] // 默认全选
+  } finally {
+    previewLoading.value = false
+  }
+}
+async function downloadFromPreview() {
+  const f = previewFileRef.value
+  if (!f) return
+  const all = previewData.value?.columns ?? []
+  // 全选时不传 columns（直接给原文件），否则按选中列裁剪
+  const cols = selectedCols.value.length === all.length ? undefined : selectedCols.value
+  await downloadFile(f.id, f.name, cols)
 }
 
 onMounted(loadTree)
@@ -230,6 +261,10 @@ onMounted(loadTree)
                   <span>{{ fmtTime(f.created_at) }}</span>
                 </div>
               </div>
+              <button class="dl-btn ghost" @click.stop="openPreview(f)">
+                <el-icon><View /></el-icon>
+                <span>预览</span>
+              </button>
               <button
                 class="dl-btn"
                 :class="{ busy: downloadingId === f.id }"
@@ -268,6 +303,48 @@ onMounted(loadTree)
         </div>
       </section>
     </div>
+
+    <!-- v0.24 在线预览 + 选列下载 -->
+    <el-dialog v-model="previewVisible" :title="previewFileRef?.name || '预览'" width="80%" top="6vh">
+      <div v-loading="previewLoading">
+        <div v-if="previewData" class="pv-tools">
+          <span class="pv-hint">预览前 50 行 · 选择要下载的列：</span>
+          <el-select
+            v-model="selectedCols"
+            multiple
+            collapse-tags
+            collapse-tags-tooltip
+            placeholder="选择列"
+            class="pv-select"
+          >
+            <el-option v-for="c in previewData.columns" :key="c" :label="c" :value="c" />
+          </el-select>
+          <el-button type="primary" :icon="Download" @click="downloadFromPreview">
+            下载{{
+              selectedCols.length && selectedCols.length !== previewData.columns.length
+                ? `选中 ${selectedCols.length} 列`
+                : '全部'
+            }}
+          </el-button>
+        </div>
+        <el-table
+          v-if="previewData"
+          :data="previewData.rows"
+          border
+          height="460"
+          size="small"
+        >
+          <el-table-column
+            v-for="(col, i) in previewData.columns"
+            :key="i"
+            :label="col"
+            min-width="120"
+          >
+            <template #default="{ row }">{{ row[i] }}</template>
+          </el-table-column>
+        </el-table>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -598,6 +675,22 @@ onMounted(loadTree)
 }
 .dl-btn.busy {
   opacity: 1;
+}
+.dl-btn.ghost {
+  margin-right: 8px;
+}
+.pv-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.pv-hint {
+  font-size: 13px;
+  color: var(--ink-3);
+}
+.pv-select {
+  min-width: 260px;
 }
 .dl-spin {
   animation: spin 0.8s linear infinite;

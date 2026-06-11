@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Delete, Download, Edit, Plus, View, VideoPlay } from '@element-plus/icons-vue'
+import { Delete, Download, Edit, Plus, Setting, View, VideoPlay } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { onMounted, reactive, ref } from 'vue'
 
@@ -20,6 +20,7 @@ import {
 import { type Folder, listFolders } from '@/api/catalog'
 import { type DataSource, listDataSources } from '@/api/datasource'
 import { downloadDataFile } from '@/api/datafile'
+import DatasetSettings from '@/components/DatasetSettings.vue'
 import PageContainer from '@/components/PageContainer.vue'
 
 const loading = ref(false)
@@ -155,6 +156,36 @@ async function handleSave() {
   }
 }
 
+// ---- 数据集设置（参数/推送/脱敏/图表）----
+const settingsVisible = ref(false)
+const settingsDataset = ref<Dataset | null>(null)
+function openSettings(row: Dataset) {
+  settingsDataset.value = row
+  settingsVisible.value = true
+}
+
+// ---- 参数运行表单（数据集有参数时，运行前填值）----
+const paramDialogVisible = ref(false)
+const paramTarget = ref<Dataset | null>(null)
+const paramValues = ref<Record<string, string>>({})
+function startRun(row: Dataset) {
+  if (row.params?.length) {
+    paramTarget.value = row
+    paramValues.value = Object.fromEntries(
+      row.params.map((p) => [p.name, p.default ?? '']),
+    )
+    paramDialogVisible.value = true
+  } else {
+    handleRun(row)
+  }
+}
+async function confirmParamRun() {
+  const row = paramTarget.value
+  if (!row) return
+  paramDialogVisible.value = false
+  await handleRun(row, { ...paramValues.value })
+}
+
 // ---- v0.23 批量操作 ----
 const selected = ref<Dataset[]>([])
 const batching = ref(false)
@@ -202,11 +233,11 @@ async function showFailure(row: Dataset) {
   })
 }
 
-async function handleRun(row: Dataset) {
+async function handleRun(row: Dataset, params?: Record<string, string>) {
   runningId.value = row.id
   try {
     // 异步运行：先拿到"运行中"的文件，再轮询其状态直到成功/失败（S1）
-    const { data } = await runDataset(row.id)
+    const { data } = await runDataset(row.id, params)
     let result = data
     const startedAt = Date.now()
     // 最长轮询 10 分钟，每 1.5s 查一次
@@ -307,18 +338,19 @@ onMounted(async () => {
             <span v-else class="muted">未运行</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="320" fixed="right">
+        <el-table-column label="操作" width="380" fixed="right">
           <template #default="{ row }">
             <el-button
               text
               type="primary"
               :icon="VideoPlay"
               :loading="runningId === row.id"
-              @click="handleRun(row)"
+              @click="startRun(row)"
               >运行</el-button
             >
             <el-button text :icon="View" @click="handlePreview(row)">预览</el-button>
             <el-button text :icon="Download" @click="handleDownload(row)">下载</el-button>
+            <el-button text :icon="Setting" @click="openSettings(row)">设置</el-button>
             <el-button text :icon="Edit" @click="openEdit(row)">编辑</el-button>
             <el-button text type="danger" :icon="Delete" @click="handleDelete(row)">删除</el-button>
           </template>
@@ -425,6 +457,26 @@ onMounted(async () => {
         <el-button type="primary" :loading="batching" @click="submitRetention">应用</el-button>
       </template>
     </el-dialog>
+
+    <!-- 参数运行：数据集有参数时，运行前填值 -->
+    <el-dialog v-model="paramDialogVisible" title="填写运行参数" width="440px">
+      <el-form label-width="110px">
+        <el-form-item v-for="p in paramTarget?.params ?? []" :key="p.name" :label="p.label || p.name">
+          <el-input v-model="paramValues[p.name]" :placeholder="`默认 ${p.default ?? ''}`" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="paramDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmParamRun">运行</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 数据集设置：参数 / 推送 / 脱敏 / 图表 -->
+    <DatasetSettings
+      v-model="settingsVisible"
+      :dataset="settingsDataset"
+      @saved="load"
+    />
   </PageContainer>
 </template>
 

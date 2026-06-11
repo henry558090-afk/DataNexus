@@ -7,6 +7,12 @@ export interface DatasetLastRun {
   created_at: string
 }
 
+export interface DatasetParam {
+  name: string
+  label?: string
+  default?: string
+}
+
 export interface Dataset {
   id: number
   name: string
@@ -14,6 +20,7 @@ export interface Dataset {
   datasource: number
   datasource_name: string
   sql_text: string
+  params: DatasetParam[]
   target_folder: number | null
   folder_name: string | null
   file_prefix: string
@@ -31,6 +38,7 @@ export interface DatasetInput {
   description?: string
   datasource: number | null
   sql_text: string
+  params?: DatasetParam[]
   target_folder?: number | null
   file_prefix?: string
   date_format?: string

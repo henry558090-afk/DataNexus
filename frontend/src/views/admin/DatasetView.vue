@@ -7,6 +7,8 @@ import {
   type Dataset,
   type DatasetInput,
   type PreviewResult,
+  batchRetention,
+  batchRunDatasets,
   createDataset,
   deleteDataset,
   getDataFile,
@@ -153,6 +155,53 @@ async function handleSave() {
   }
 }
 
+// ---- v0.23 批量操作 ----
+const selected = ref<Dataset[]>([])
+const batching = ref(false)
+const retentionVisible = ref(false)
+const retentionForm = ref<{ keep_count: number | null; keep_days: number | null }>({
+  keep_count: null,
+  keep_days: null,
+})
+function onSelectionChange(rows: Dataset[]) {
+  selected.value = rows
+}
+async function handleBatchRun() {
+  batching.value = true
+  try {
+    const ids = selected.value.map((r) => r.id)
+    const { data } = await batchRunDatasets(ids)
+    ElMessage.success(`已触发 ${data.count} 个数据集运行（后台执行，稍后刷新查看结果）`)
+    await load()
+  } finally {
+    batching.value = false
+  }
+}
+async function submitRetention() {
+  batching.value = true
+  try {
+    const ids = selected.value.map((r) => r.id)
+    const { data } = await batchRetention(
+      ids,
+      retentionForm.value.keep_count,
+      retentionForm.value.keep_days,
+    )
+    ElMessage.success(`已更新 ${data.updated} 个数据集的保留策略`)
+    retentionVisible.value = false
+    await load()
+  } finally {
+    batching.value = false
+  }
+}
+async function showFailure(row: Dataset) {
+  if (!row.last_run) return
+  const { data } = await getDataFile(row.last_run.id)
+  ElMessageBox.alert(data.error_msg || '无错误详情', '运行失败详情', {
+    type: 'error',
+    customClass: 'failure-box',
+  })
+}
+
 async function handleRun(row: Dataset) {
   runningId.value = row.id
   try {
@@ -214,11 +263,22 @@ onMounted(async () => {
 <template>
   <PageContainer title="数据集" subtitle="写 SQL → 定时/手动跑 → 在目标文件夹新增带日期命名的文件">
     <template #actions>
+      <el-button
+        v-if="selected.length"
+        :icon="VideoPlay"
+        :loading="batching"
+        @click="handleBatchRun"
+        >批量运行 ({{ selected.length }})</el-button
+      >
+      <el-button v-if="selected.length" :loading="batching" @click="retentionVisible = true"
+        >批量改保留</el-button
+      >
       <el-button type="primary" :icon="Plus" @click="openCreate">新建数据集</el-button>
     </template>
 
     <el-card class="card" shadow="never">
-      <el-table v-loading="loading" :data="rows" stripe>
+      <el-table v-loading="loading" :data="rows" stripe @selection-change="onSelectionChange">
+        <el-table-column type="selection" width="44" />
         <el-table-column prop="name" label="名称" min-width="140" />
         <el-table-column prop="datasource_name" label="数据源" min-width="100" />
         <el-table-column label="目标文件夹" min-width="120">
@@ -232,8 +292,17 @@ onMounted(async () => {
             <el-tag v-if="row.last_run?.status === 'success'" type="success" size="small">
               {{ row.last_run.row_count }} 行
             </el-tag>
-            <el-tag v-else-if="row.last_run?.status === 'failed'" type="danger" size="small">
-              失败
+            <el-tag
+              v-else-if="row.last_run?.status === 'failed'"
+              type="danger"
+              size="small"
+              class="clickable"
+              @click="showFailure(row)"
+            >
+              失败 ⓘ
+            </el-tag>
+            <el-tag v-else-if="row.last_run?.status === 'running'" type="warning" size="small">
+              运行中
             </el-tag>
             <span v-else class="muted">未运行</span>
           </template>
@@ -340,6 +409,22 @@ onMounted(async () => {
         <el-empty v-else-if="!previewLoading" :description="preview?.message || '无数据'" />
       </div>
     </el-dialog>
+
+    <el-dialog v-model="retentionVisible" title="批量改保留策略" width="440px">
+      <p class="muted">将对选中的 {{ selected.length }} 个数据集统一设置保留策略（空=不改该项）。</p>
+      <el-form label-width="84px">
+        <el-form-item label="保留份数">
+          <el-input-number v-model="retentionForm.keep_count" :min="0" />
+        </el-form-item>
+        <el-form-item label="保留天数">
+          <el-input-number v-model="retentionForm.keep_days" :min="0" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="retentionVisible = false">取消</el-button>
+        <el-button type="primary" :loading="batching" @click="submitRetention">应用</el-button>
+      </template>
+    </el-dialog>
   </PageContainer>
 </template>
 
@@ -353,5 +438,8 @@ onMounted(async () => {
 }
 .mx {
   margin: 0 8px;
+}
+.clickable {
+  cursor: pointer;
 }
 </style>

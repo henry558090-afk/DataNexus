@@ -4,6 +4,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { type DataFile, listDataFiles } from '@/api/datafile'
+import { type RunHealth, getRunHealth } from '@/api/dataset'
 import { type Stats, getStats } from '@/api/stats'
 import { useAuthStore } from '@/stores/auth'
 
@@ -12,7 +13,16 @@ const auth = useAuthStore()
 
 const stats = ref<Stats>({ datasources: 0, datasets: 0, files: 0, today_runs: 0 })
 const recent = ref<DataFile[]>([])
+const health = ref<RunHealth | null>(null)
 const loading = ref(true)
+
+function fmtDuration(ms: number | null): string {
+  if (ms == null) return '-'
+  return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
+}
+function pct(r: number | null): string {
+  return r == null ? '-' : `${(r * 100).toFixed(0)}%`
+}
 
 const cards = computed(() => [
   {
@@ -50,9 +60,10 @@ function fmtTime(s: string): string {
 
 onMounted(async () => {
   try {
-    const [s, f] = await Promise.all([getStats(), listDataFiles()])
+    const [s, f, h] = await Promise.all([getStats(), listDataFiles(), getRunHealth(7)])
     stats.value = s.data
     recent.value = f.data.results.slice(0, 7)
+    health.value = h.data
   } finally {
     loading.value = false
   }
@@ -84,6 +95,40 @@ onMounted(async () => {
         <el-icon class="stat-go"><Right /></el-icon>
       </button>
     </div>
+
+    <section v-if="health && health.total" class="health">
+      <div class="health-head">
+        <span class="rt">运行健康 · 近 7 天</span>
+        <span class="hsub">{{ health.total }} 次运行</span>
+      </div>
+      <div class="health-metrics">
+        <div class="hm">
+          <div class="hm-v" :class="(health.success_rate ?? 1) >= 0.95 ? 'ok' : 'warn'">
+            {{ pct(health.success_rate) }}
+          </div>
+          <div class="hm-l">成功率</div>
+        </div>
+        <div class="hm">
+          <div class="hm-v">{{ fmtDuration(health.avg_duration_ms) }}</div>
+          <div class="hm-l">平均耗时</div>
+        </div>
+        <div class="hm">
+          <div class="hm-v" :class="health.failed ? 'bad' : ''">{{ health.failed }}</div>
+          <div class="hm-l">失败</div>
+        </div>
+        <div class="hm">
+          <div class="hm-v">{{ health.running }}</div>
+          <div class="hm-l">运行中</div>
+        </div>
+      </div>
+      <div v-if="health.recent_failures.length" class="hfails">
+        <div v-for="ff in health.recent_failures.slice(0, 4)" :key="ff.id" class="hfail">
+          <el-tag type="danger" size="small" effect="light">失败</el-tag>
+          <span class="hfail-name">{{ ff.dataset || ff.name }}</span>
+          <span class="hfail-err">{{ ff.error_msg }}</span>
+        </div>
+      </div>
+    </section>
 
     <section class="recent">
       <div class="recent-head">
@@ -216,6 +261,74 @@ onMounted(async () => {
 .stat:hover .stat-go {
   opacity: 1;
   transform: translateX(0);
+}
+.health {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 16px 18px;
+}
+.health-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.hsub {
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.health-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+.hm {
+  text-align: center;
+}
+.hm-v {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.hm-v.ok {
+  color: var(--success);
+}
+.hm-v.warn {
+  color: #d97706;
+}
+.hm-v.bad {
+  color: var(--danger, #dc2626);
+}
+.hm-l {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  margin-top: 2px;
+}
+.hfails {
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hfail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+}
+.hfail-name {
+  font-weight: 550;
+  flex-shrink: 0;
+}
+.hfail-err {
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .recent {
   background: var(--surface);

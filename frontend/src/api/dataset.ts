@@ -76,3 +76,25 @@ export function runDataset(id: number) {
 export function getDataFile(id: number) {
   return http.get<RunResult>(`/datafiles/${id}/`)
 }
+
+// ---- v0.23 管理员效率 ----
+export interface RunHealth {
+  days: number
+  total: number
+  success: number
+  failed: number
+  running: number
+  success_rate: number | null
+  avg_duration_ms: number | null
+  recent_failures: { id: number; dataset: string | null; name: string; error_msg: string; created_at: string }[]
+  slowest_datasets: { dataset: number; dataset__name: string; avg_ms: number; runs: number }[]
+}
+export function batchRunDatasets(ids: number[]) {
+  return http.post<{ count: number }>('/datasets/batch-run/', { ids })
+}
+export function batchRetention(ids: number[], keep_count?: number | null, keep_days?: number | null) {
+  return http.post<{ updated: number }>('/datasets/batch-retention/', { ids, keep_count, keep_days })
+}
+export function getRunHealth(days = 7) {
+  return http.get<RunHealth>(`/datasets/run-health/?days=${days}`)
+}

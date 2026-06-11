@@ -110,6 +110,7 @@ def _create_running_file(dataset: Dataset, user=None) -> DataFile:
 
 def _execute_run(dataset: Dataset, datafile: DataFile) -> None:
     """执行体：连库跑数 → 写 Excel → 回填结果 → 保留清理。无论成败落库，不抛。"""
+    started = time.monotonic()
     try:
         columns, rows = db.stream_query(
             _conn_params(dataset.datasource),
@@ -129,11 +130,13 @@ def _execute_run(dataset: Dataset, datafile: DataFile) -> None:
         datafile.row_count = row_count
         datafile.file_path = str(out_path)
         datafile.file_size = out_path.stat().st_size
+        datafile.duration_ms = int((time.monotonic() - started) * 1000)
         _retry_locked(datafile.save)
         _apply_retention(dataset)
     except Exception as exc:  # noqa: BLE001 - 失败落库，不抛 500
         datafile.status = DataFile.Status.FAILED
         datafile.error_msg = str(exc)
+        datafile.duration_ms = int((time.monotonic() - started) * 1000)
         _retry_locked(datafile.save)
 
 

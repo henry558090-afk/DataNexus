@@ -69,8 +69,15 @@ export function deleteDataset(id: number) {
 export function previewDataset(id: number) {
   return http.post<PreviewResult>(`/datasets/${id}/preview/`)
 }
-export function runDataset(id: number) {
-  return http.post<RunResult>(`/datasets/${id}/run/`)
+export function runDataset(id: number, params?: Record<string, unknown>) {
+  return http.post<RunResult>(`/datasets/${id}/run/`, params ? { params } : undefined)
+}
+// v0.26 图表数据：对最新成功文件按 x 分组聚合 y
+export function getChartData(id: number, x: string, y?: string, agg: 'sum' | 'count' | 'avg' = 'sum') {
+  return http.get<{ labels: string[]; values: number[]; agg: string }>(
+    `/datasets/${id}/chart-data/`,
+    { params: { x, y, agg } },
+  )
 }
 // 轮询单个数据文件的运行状态（异步运行后用，S1）
 export function getDataFile(id: number) {

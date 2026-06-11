@@ -41,10 +41,29 @@ def _conn_params(datasource) -> db.ConnParams:
     )
 
 
-def preview_dataset(dataset: Dataset, *, limit: int = 50) -> tuple[list[str], list[tuple]]:
+def resolve_params(dataset: Dataset, provided: dict | None = None) -> dict:
+    """合并数据集参数定义的默认值与本次提供的值（v0.26）。
+
+    只接受**已定义**的参数名（防注入额外绑定变量）；缺省用定义里的 default。
+    dataset.params 形如 [{"name": "dt", "label": "日期", "default": "2026-01-01"}, ...]。
+    """
+    provided = provided or {}
+    resolved: dict = {}
+    for spec in dataset.params or []:
+        name = spec.get("name")
+        if not name:
+            continue
+        resolved[name] = provided.get(name, spec.get("default"))
+    return resolved
+
+
+def preview_dataset(
+    dataset: Dataset, *, params: dict | None = None, limit: int = 50
+) -> tuple[list[str], list[tuple]]:
     return db.preview_query(
         _conn_params(dataset.datasource),
         dataset.sql_text,
+        binds=resolve_params(dataset, params),
         limit=limit,
         timeout_seconds=settings.QUERY_TIMEOUT_SECONDS,
     )
@@ -108,13 +127,14 @@ def _create_running_file(dataset: Dataset, user=None) -> DataFile:
     )
 
 
-def _execute_run(dataset: Dataset, datafile: DataFile) -> None:
+def _execute_run(dataset: Dataset, datafile: DataFile, params: dict | None = None) -> None:
     """执行体：连库跑数 → 写 Excel → 回填结果 → 保留清理。无论成败落库，不抛。"""
     started = time.monotonic()
     try:
         columns, rows = db.stream_query(
             _conn_params(dataset.datasource),
             dataset.sql_text,
+            binds=resolve_params(dataset, params),
             max_rows=settings.QUERY_MAX_ROWS,
             fetch_size=settings.QUERY_FETCH_SIZE,
             timeout_seconds=settings.QUERY_TIMEOUT_SECONDS,
@@ -149,14 +169,14 @@ def _execute_run(dataset: Dataset, datafile: DataFile) -> None:
             pass
 
 
-def run_dataset(dataset: Dataset, user=None) -> DataFile:
+def run_dataset(dataset: Dataset, user=None, params: dict | None = None) -> DataFile:
     """同步运行数据集（调度进程用）：建记录 → 执行 → 返回最终 DataFile。"""
     datafile = _create_running_file(dataset, user)
-    _execute_run(dataset, datafile)
+    _execute_run(dataset, datafile, params)
     return datafile
 
 
-def start_dataset_run(dataset: Dataset, user=None) -> DataFile:
+def start_dataset_run(dataset: Dataset, user=None, params: dict | None = None) -> DataFile:
     """异步运行（Web 接口用，S1）：立刻返回"运行中"记录，后台线程执行实际跑数。
 
     避免长查询/写 Excel 阻塞 gunicorn worker 导致整站卡死。前端按 DataFile.status
@@ -170,13 +190,13 @@ def start_dataset_run(dataset: Dataset, user=None) -> DataFile:
 
     # 测试或显式配置下内联执行，便于断言、避免线程跨事务可见性问题
     if getattr(settings, "DATASET_RUN_INLINE", False):
-        _execute_run(dataset, datafile)
+        _execute_run(dataset, datafile, params)
         datafile.refresh_from_db()
         return datafile
 
     def _worker():
         try:
-            _execute_run(dataset, datafile)
+            _execute_run(dataset, datafile, params)
         finally:
             connections.close_all()  # 关闭本线程的 DB 连接
 

@@ -26,20 +26,78 @@ class DatasetViewSet(viewsets.ModelViewSet):
     def preview(self, request: Request, pk: str | None = None) -> Response:
         dataset = self.get_object()
         try:
-            columns, rows = services.preview_dataset(dataset, limit=50)
+            columns, rows = services.preview_dataset(
+                dataset, params=request.data.get("params"), limit=50
+            )
         except Exception as exc:  # noqa: BLE001
             return Response({"ok": False, "message": str(exc)})
         return Response({"ok": True, "columns": columns, "rows": rows})
 
     @action(detail=True, methods=["post"])
     def run(self, request: Request, pk: str | None = None) -> Response:
-        """触发运行：异步执行（S1），立即返回"运行中"的 DataFile，前端按 status 轮询。"""
+        """触发运行：异步执行（S1），立即返回"运行中"的 DataFile，前端按 status 轮询。
+
+        可选 body.params（v0.26 参数化查询）：仅接受数据集已定义的参数名，作为绑定变量。
+        """
         from apps.audit.services import log
 
         dataset = self.get_object()
-        datafile = services.start_dataset_run(dataset, user=request.user)
+        datafile = services.start_dataset_run(
+            dataset, user=request.user, params=request.data.get("params")
+        )
         log("run", request=request, target=dataset.name)
         return Response(DataFileSerializer(datafile).data)
+
+    @action(detail=True, methods=["get"], url_path="chart-data")
+    def chart_data(self, request: Request, pk: str | None = None) -> Response:
+        """图表数据（v0.26）：对最新成功文件按 x 列分组、对 y 列聚合（sum/count/avg）。
+
+        ?x=列名&y=列名&agg=sum|count|avg → {labels:[], values:[]}。
+        """
+        from apps.execution.models import DataFile
+        from core import excel
+
+        dataset = self.get_object()
+        x = request.query_params.get("x")
+        y = request.query_params.get("y")
+        agg = request.query_params.get("agg", "sum")
+        if not x:
+            return Response({"detail": "缺少 x 列"}, status=400)
+        f = (
+            DataFile.objects.filter(dataset=dataset, status=DataFile.Status.SUCCESS)
+            .order_by("-created_at")
+            .first()
+        )
+        if not f or not f.file_path:
+            return Response({"detail": "暂无可用数据文件"}, status=404)
+        cols = [x] + ([y] if y else [])
+        columns, rows = excel.read_xlsx(f.file_path, columns=cols)
+        if x not in columns:
+            return Response({"detail": f"列 {x} 不存在"}, status=400)
+        xi = columns.index(x)
+        yi = columns.index(y) if y and y in columns else None
+        buckets: dict = {}
+        for row in rows:
+            key = row[xi]
+            if agg == "count":
+                buckets[key] = buckets.get(key, 0) + 1
+            elif yi is not None:
+                try:
+                    val = float(row[yi]) if row[yi] is not None else 0
+                except (TypeError, ValueError):
+                    val = 0
+                cur = buckets.get(key, [0, 0])
+                buckets[key] = [cur[0] + val, cur[1] + 1]
+        labels = list(buckets.keys())
+        if agg == "count":
+            values = [buckets[k] for k in labels]
+        elif agg == "avg":
+            values = [
+                round(buckets[k][0] / buckets[k][1], 4) if buckets[k][1] else 0 for k in labels
+            ]
+        else:  # sum
+            values = [buckets[k][0] for k in labels]
+        return Response({"labels": [str(label) for label in labels], "values": values, "agg": agg})
 
     @action(detail=False, methods=["post"], url_path="batch-run")
     def batch_run(self, request: Request) -> Response:

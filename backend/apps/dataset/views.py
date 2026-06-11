@@ -9,8 +9,8 @@ from rest_framework.response import Response
 
 from apps.accounts.permissions import IsManager
 from apps.dataset import services
-from apps.dataset.models import Dataset
-from apps.dataset.serializers import DatasetSerializer
+from apps.dataset.models import Dataset, Subscription
+from apps.dataset.serializers import DatasetSerializer, SubscriptionSerializer
 from apps.execution.models import DataFile
 from apps.execution.serializers import DataFileSerializer
 
@@ -118,3 +118,18 @@ class DatasetViewSet(viewsets.ModelViewSet):
                 "slowest_datasets": slowest,
             }
         )
+
+
+class SubscriptionViewSet(viewsets.ModelViewSet):
+    """数据集推送订阅（仅管理员，v0.25）：CRUD。支持 ?dataset 过滤。"""
+
+    queryset = Subscription.objects.select_related("dataset").all()
+    serializer_class = SubscriptionSerializer
+    permission_classes = [IsManager]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        dataset_id = self.request.query_params.get("dataset")
+        if dataset_id:
+            qs = qs.filter(dataset_id=dataset_id)
+        return qs

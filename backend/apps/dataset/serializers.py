@@ -1,7 +1,16 @@
 from rest_framework import serializers
 
-from apps.dataset.models import Dataset
+from apps.dataset.models import Dataset, Subscription
 from core.sql_guard import SqlNotAllowed, validate_readonly_sql
+
+
+class SubscriptionSerializer(serializers.ModelSerializer):
+    dataset_name = serializers.CharField(source="dataset.name", read_only=True)
+
+    class Meta:
+        model = Subscription
+        fields = ["id", "dataset", "dataset_name", "channel", "target", "is_active", "created_at"]
+        read_only_fields = ["id", "created_at"]
 
 
 class DatasetSerializer(serializers.ModelSerializer):

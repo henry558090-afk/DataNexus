@@ -139,6 +139,15 @@ def _execute_run(dataset: Dataset, datafile: DataFile) -> None:
         datafile.duration_ms = int((time.monotonic() - started) * 1000)
         _retry_locked(datafile.save)
 
+    # 推送（v0.25）：仅成功时，放在 try 外，自身吞异常，绝不影响主运行结果
+    if datafile.status == DataFile.Status.SUCCESS:
+        from apps.dataset.notify import notify_subscribers
+
+        try:
+            notify_subscribers(dataset, datafile)
+        except Exception:  # noqa: BLE001
+            pass
+
 
 def run_dataset(dataset: Dataset, user=None) -> DataFile:
     """同步运行数据集（调度进程用）：建记录 → 执行 → 返回最终 DataFile。"""

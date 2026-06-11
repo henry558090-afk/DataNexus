@@ -58,3 +58,11 @@ export function recentDownloads() {
 export function getUpdates(since?: string) {
   return http.get<{ count: number; files: PortalFile[] }>('/portal/updates/', { params: { since } })
 }
+
+// v0.25 用户提交访问申请 / 看自己的申请
+export function myAccessRequests() {
+  return http.get('/portal/access-requests/')
+}
+export function requestAccess(folderId: number, reason?: string) {
+  return http.post('/portal/access-requests/', { folder: folderId, reason })
+}

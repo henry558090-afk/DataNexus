@@ -146,6 +146,32 @@ def portal_recent_downloads(request: Request) -> Response:
     return Response([{"target": log.target, "created_at": log.created_at} for log in logs])
 
 
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def portal_access_requests(request: Request):
+    """用户的访问申请（v0.25）：GET 列出自己的；POST 提交对某文件夹的申请。"""
+    from apps.permission.models import AccessRequest
+    from apps.permission.serializers import AccessRequestSerializer
+
+    if request.method == "GET":
+        qs = AccessRequest.objects.filter(user=request.user).select_related("folder", "reviewed_by")
+        return Response(AccessRequestSerializer(qs, many=True).data)
+
+    folder_id = request.data.get("folder")
+    folder = get_object_or_404(Folder, pk=folder_id)
+    if can_view_folder(request.user, folder):
+        return Response({"detail": "你已可访问该文件夹"}, status=400)
+    existing = AccessRequest.objects.filter(
+        user=request.user, folder=folder, status=AccessRequest.Status.PENDING
+    ).first()
+    if existing:
+        return Response(AccessRequestSerializer(existing).data, status=200)
+    ar = AccessRequest.objects.create(
+        user=request.user, folder=folder, reason=(request.data.get("reason") or "")[:500]
+    )
+    return Response(AccessRequestSerializer(ar).data, status=201)
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def portal_updates(request: Request) -> Response:

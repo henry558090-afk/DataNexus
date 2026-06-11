@@ -63,3 +63,26 @@ class Dataset(models.Model):
         except (ValueError, TypeError):
             stamp = when.strftime("%Y%m%d")
         return f"{prefix}_{stamp}.xlsx"
+
+
+class Subscription(models.Model):
+    """数据集运行成功后的推送订阅（v0.25）：邮件 或 Webhook（钉钉/企业微信机器人）。"""
+
+    class Channel(models.TextChoices):
+        EMAIL = "email", "邮件"
+        WEBHOOK = "webhook", "Webhook(钉钉/企微)"
+
+    dataset = models.ForeignKey(
+        Dataset, on_delete=models.CASCADE, related_name="subscriptions", verbose_name="数据集"
+    )
+    channel = models.CharField("渠道", max_length=20, choices=Channel.choices)
+    target = models.CharField("目标", max_length=500)  # 邮箱地址 或 webhook URL
+    is_active = models.BooleanField("启用", default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "推送订阅"
+        verbose_name_plural = "推送订阅"
+
+    def __str__(self) -> str:
+        return f"{self.dataset_id}:{self.channel}:{self.target}"

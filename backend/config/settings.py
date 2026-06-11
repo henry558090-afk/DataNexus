@@ -150,6 +150,22 @@ TOKEN_TTL_SECONDS = env.int("TOKEN_TTL_SECONDS", default=7 * 24 * 3600)
 # 数据集运行是否内联执行（同步）。默认 False=后台线程异步（S1）；测试置 True 便于断言
 DATASET_RUN_INLINE = env.bool("DATASET_RUN_INLINE", default=False)
 
+# ---- 订阅推送（v0.25）：邮件 + Webhook（钉钉/企业微信机器人）----
+# 邮件：默认开发用 console 后端打印；生产填 SMTP。
+EMAIL_BACKEND = env(
+    "EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend"
+)
+EMAIL_HOST = env("EMAIL_HOST", default="")
+EMAIL_PORT = env.int("EMAIL_PORT", default=25)
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=False)
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="data-nexus@localhost")
+# 平台对外访问地址，用于推送消息里拼下载链接（如 https://data.corp.com）
+PLATFORM_BASE_URL = env("PLATFORM_BASE_URL", default="")
+# Webhook 推送超时秒
+WEBHOOK_TIMEOUT_SECONDS = env.int("WEBHOOK_TIMEOUT_SECONDS", default=10)
+
 # ---- 安全加固 ----
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"

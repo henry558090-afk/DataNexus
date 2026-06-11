@@ -98,3 +98,47 @@ export function batchRetention(ids: number[], keep_count?: number | null, keep_d
 export function getRunHealth(days = 7) {
   return http.get<RunHealth>(`/datasets/run-health/?days=${days}`)
 }
+
+// ---- v0.25 订阅推送 ----
+export interface Subscription {
+  id: number
+  dataset: number
+  dataset_name: string
+  channel: 'email' | 'webhook'
+  target: string
+  is_active: boolean
+  created_at: string
+}
+export function listSubscriptions(dataset?: number) {
+  return http.get<Subscription[]>('/subscriptions/', { params: { dataset } })
+}
+export function createSubscription(data: {
+  dataset: number
+  channel: string
+  target: string
+}) {
+  return http.post<Subscription>('/subscriptions/', data)
+}
+export function deleteSubscription(id: number) {
+  return http.delete(`/subscriptions/${id}/`)
+}
+
+// ---- v0.25 访问申请审批（管理员）----
+export interface AccessRequest {
+  id: number
+  username: string
+  folder: number
+  folder_name: string
+  reason: string
+  status: 'pending' | 'approved' | 'rejected'
+  created_at: string
+}
+export function listAccessRequests(status = 'pending') {
+  return http.get<AccessRequest[]>('/access-requests/', { params: { status } })
+}
+export function approveAccessRequest(id: number) {
+  return http.post(`/access-requests/${id}/approve/`)
+}
+export function rejectAccessRequest(id: number) {
+  return http.post(`/access-requests/${id}/reject/`)
+}

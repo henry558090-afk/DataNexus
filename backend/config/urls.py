@@ -15,10 +15,10 @@ from apps.accounts.views import LoginView, LogoutView, UserViewSet
 from apps.audit.views import AuditLogViewSet
 from apps.catalog import portal
 from apps.catalog.views import DepartmentViewSet, FolderShareViewSet, FolderViewSet
-from apps.dataset.views import DatasetViewSet
+from apps.dataset.views import DatasetViewSet, SubscriptionViewSet
 from apps.datasource.views import DataSourceViewSet
 from apps.execution.views import DataFileViewSet
-from apps.permission.views import MembershipViewSet
+from apps.permission.views import AccessRequestViewSet, MembershipViewSet
 
 router = DefaultRouter()
 router.register("datasources", DataSourceViewSet, basename="datasource")
@@ -30,6 +30,8 @@ router.register("folder-shares", FolderShareViewSet, basename="folder-share")
 router.register("users", UserViewSet, basename="user")
 router.register("memberships", MembershipViewSet, basename="membership")
 router.register("audit-logs", AuditLogViewSet, basename="audit-log")
+router.register("subscriptions", SubscriptionViewSet, basename="subscription")
+router.register("access-requests", AccessRequestViewSet, basename="access-request")
 
 
 def health(_request: HttpRequest) -> JsonResponse:
@@ -111,6 +113,9 @@ urlpatterns = [
         name="portal-recent-downloads",
     ),
     path("api/portal/updates/", portal.portal_updates, name="portal-updates"),
+    path(
+        "api/portal/access-requests/", portal.portal_access_requests, name="portal-access-requests"
+    ),
     # 前端单页：放最后，排除 api/django-admin/static/media（/admin/* 留给前端）
     re_path(r"^(?!api/|django-admin/|static/|media/).*$", spa, name="spa"),
 ]

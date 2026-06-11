@@ -11,14 +11,20 @@ from rest_framework.response import Response
 from rest_framework.routers import DefaultRouter
 
 from apps.accounts.permissions import IsManager
-from apps.accounts.views import LoginView, UserViewSet
+from apps.accounts.views import (
+    LoginView,
+    LogoutView,
+    UserViewSet,
+    WecomCallbackView,
+    WecomLoginView,
+)
 from apps.audit.views import AuditLogViewSet
 from apps.catalog import portal
 from apps.catalog.views import DepartmentViewSet, FolderShareViewSet, FolderViewSet
-from apps.dataset.views import DatasetViewSet
+from apps.dataset.views import DatasetViewSet, MaskingRuleViewSet, SubscriptionViewSet
 from apps.datasource.views import DataSourceViewSet
 from apps.execution.views import DataFileViewSet
-from apps.permission.views import MembershipViewSet
+from apps.permission.views import AccessRequestViewSet, MembershipViewSet
 
 router = DefaultRouter()
 router.register("datasources", DataSourceViewSet, basename="datasource")
@@ -30,11 +36,14 @@ router.register("folder-shares", FolderShareViewSet, basename="folder-share")
 router.register("users", UserViewSet, basename="user")
 router.register("memberships", MembershipViewSet, basename="membership")
 router.register("audit-logs", AuditLogViewSet, basename="audit-log")
+router.register("subscriptions", SubscriptionViewSet, basename="subscription")
+router.register("access-requests", AccessRequestViewSet, basename="access-request")
+router.register("masking-rules", MaskingRuleViewSet, basename="masking-rule")
 
 
 def health(_request: HttpRequest) -> JsonResponse:
     """健康检查，便于确认服务可用。"""
-    return JsonResponse({"status": "ok", "service": "data-nexus", "version": "v0.19"})
+    return JsonResponse({"status": "ok", "service": "data-nexus", "version": "v0.22"})
 
 
 def spa(_request: HttpRequest):
@@ -87,6 +96,9 @@ urlpatterns = [
     path("django-admin/", admin.site.urls),  # 挪开，给前端 /admin/* 让路
     path("api/health/", health, name="health"),
     path("api/auth/token/", LoginView.as_view(), name="auth-token"),  # 账号密码换 Token + 审计
+    path("api/auth/logout/", LogoutView.as_view(), name="auth-logout"),  # 登出删 Token
+    path("api/auth/wecom/login/", WecomLoginView.as_view(), name="wecom-login"),  # 企微 SSO
+    path("api/auth/wecom/callback/", WecomCallbackView.as_view(), name="wecom-callback"),
     path("api/auth/me/", me, name="auth-me"),
     path("api/stats/", stats, name="stats"),
     path("api/", include(router.urls)),  # /api/datasources/ ...
@@ -97,6 +109,22 @@ urlpatterns = [
     ),
     path("api/portal/search/", portal.portal_search, name="portal-search"),
     path("api/portal/files/<int:pk>/download/", portal.portal_download, name="portal-download"),
+    path("api/portal/files/<int:pk>/preview/", portal.portal_file_preview, name="portal-preview"),
+    path("api/portal/favorites/", portal.portal_favorites, name="portal-favorites"),
+    path(
+        "api/portal/folders/<int:pk>/favorite/",
+        portal.portal_toggle_favorite,
+        name="portal-toggle-favorite",
+    ),
+    path(
+        "api/portal/recent-downloads/",
+        portal.portal_recent_downloads,
+        name="portal-recent-downloads",
+    ),
+    path("api/portal/updates/", portal.portal_updates, name="portal-updates"),
+    path(
+        "api/portal/access-requests/", portal.portal_access_requests, name="portal-access-requests"
+    ),
     # 前端单页：放最后，排除 api/django-admin/static/media（/admin/* 留给前端）
     re_path(r"^(?!api/|django-admin/|static/|media/).*$", spa, name="spa"),
 ]

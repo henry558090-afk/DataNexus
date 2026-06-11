@@ -3,18 +3,39 @@
 可见性统一走 apps.permission.services（默认拒绝）。
 """
 
+import tempfile
 from pathlib import Path
 
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404
+from django.utils.dateparse import parse_datetime
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from apps.catalog.models import Folder
+from apps.catalog.models import Favorite, Folder
 from apps.execution.models import DataFile
 from apps.permission.services import can_view_file, can_view_folder, visible_folders
+from core import excel
+
+
+def _should_see_raw(user, dataset) -> bool:
+    """管理员/超管/老板 或 数据集属主 → 看原值；其余普通用户 → 脱敏（v0.27）。"""
+    if dataset is None:
+        return True
+    from apps.permission.services import _is_global
+
+    return _is_global(user) or dataset.owner_id == getattr(user, "id", None)
+
+
+def _masking_for(user, dataset) -> dict:
+    """该用户在该数据集下生效的脱敏规则（看原值则为空）。"""
+    if _should_see_raw(user, dataset):
+        return {}
+    from apps.dataset.masking import rules_for
+
+    return rules_for(dataset)
 
 
 def _file_brief(f: DataFile) -> dict:
@@ -64,17 +85,131 @@ def portal_folder_files(request: Request, pk: int) -> Response:
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def portal_search(request: Request) -> Response:
-    """在可见文件夹内按文件名搜索。"""
+    """在可见文件夹内搜索：按文件名 + 可选时间范围（v0.24 增强）。"""
     keyword = (request.query_params.get("q") or "").strip()
-    if not keyword:
+    date_from = request.query_params.get("from")
+    date_to = request.query_params.get("to")
+    if not keyword and not date_from and not date_to:
         return Response([])
     folder_ids = list(visible_folders(request.user).values_list("id", flat=True))
     files = DataFile.objects.filter(
-        folder_id__in=folder_ids,
-        status=DataFile.Status.SUCCESS,
-        name__icontains=keyword,
-    ).order_by("-created_at")[:200]
+        folder_id__in=folder_ids, status=DataFile.Status.SUCCESS
+    )
+    if keyword:
+        files = files.filter(name__icontains=keyword)
+    if date_from:
+        files = files.filter(created_at__date__gte=date_from)
+    if date_to:
+        files = files.filter(created_at__date__lte=date_to)
+    files = files.order_by("-created_at")[:200]
     return Response([_file_brief(f) for f in files])
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def portal_file_preview(request: Request, pk: int) -> Response:
+    """在线预览文件内容前 N 行（需可见，v0.24）。"""
+    datafile = get_object_or_404(DataFile, pk=pk)
+    if not can_view_file(request.user, datafile):
+        return Response({"detail": "无权限"}, status=403)
+    if not datafile.file_path or not Path(datafile.file_path).exists():
+        return Response({"detail": "文件不存在"}, status=404)
+    try:
+        limit = max(1, min(200, int(request.query_params.get("limit", 50))))
+    except (TypeError, ValueError):
+        limit = 50
+    columns, rows = excel.read_xlsx(datafile.file_path, limit=limit)
+    rules = _masking_for(request.user, datafile.dataset)
+    if rules:
+        from apps.dataset.masking import mask_rows
+
+        rows = mask_rows(columns, rows, rules)
+    return Response({"columns": columns, "rows": rows})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def portal_favorites(request: Request) -> Response:
+    """当前用户收藏的（仍可见的）文件夹列表（v0.24）。"""
+    visible_ids = set(visible_folders(request.user).values_list("id", flat=True))
+    favs = Favorite.objects.filter(user=request.user).select_related("folder")
+    return Response(
+        [
+            {"folder_id": f.folder_id, "name": f.folder.name}
+            for f in favs
+            if f.folder_id in visible_ids
+        ]
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def portal_toggle_favorite(request: Request, pk: int) -> Response:
+    """收藏/取消收藏某文件夹（需可见，v0.24）。返回 {favorited: bool}。"""
+    folder = get_object_or_404(Folder, pk=pk)
+    if not can_view_folder(request.user, folder):
+        return Response({"detail": "无权限"}, status=403)
+    fav = Favorite.objects.filter(user=request.user, folder=folder).first()
+    if fav:
+        fav.delete()
+        return Response({"favorited": False})
+    Favorite.objects.create(user=request.user, folder=folder)
+    return Response({"favorited": True})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def portal_recent_downloads(request: Request) -> Response:
+    """当前用户最近下载记录（来自审计日志，v0.24）。"""
+    from apps.audit.models import AuditLog
+
+    logs = AuditLog.objects.filter(
+        user=request.user, action=AuditLog.Action.DOWNLOAD
+    ).order_by("-created_at")[:10]
+    return Response([{"target": log.target, "created_at": log.created_at} for log in logs])
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def portal_access_requests(request: Request):
+    """用户的访问申请（v0.25）：GET 列出自己的；POST 提交对某文件夹的申请。"""
+    from apps.permission.models import AccessRequest
+    from apps.permission.serializers import AccessRequestSerializer
+
+    if request.method == "GET":
+        qs = AccessRequest.objects.filter(user=request.user).select_related("folder", "reviewed_by")
+        return Response(AccessRequestSerializer(qs, many=True).data)
+
+    folder_id = request.data.get("folder")
+    folder = get_object_or_404(Folder, pk=folder_id)
+    if can_view_folder(request.user, folder):
+        return Response({"detail": "你已可访问该文件夹"}, status=400)
+    existing = AccessRequest.objects.filter(
+        user=request.user, folder=folder, status=AccessRequest.Status.PENDING
+    ).first()
+    if existing:
+        return Response(AccessRequestSerializer(existing).data, status=200)
+    ar = AccessRequest.objects.create(
+        user=request.user, folder=folder, reason=(request.data.get("reason") or "")[:500]
+    )
+    return Response(AccessRequestSerializer(ar).data, status=201)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def portal_updates(request: Request) -> Response:
+    """可见范围内、since 之后新增的成功文件（站内更新通知，v0.24）。
+
+    前端把上次查看时间作为 since 传入；返回新文件列表与计数。
+    """
+    since_raw = request.query_params.get("since")
+    folder_ids = list(visible_folders(request.user).values_list("id", flat=True))
+    qs = DataFile.objects.filter(folder_id__in=folder_ids, status=DataFile.Status.SUCCESS)
+    since = parse_datetime(since_raw) if since_raw else None
+    if since is not None:
+        qs = qs.filter(created_at__gt=since)
+    files = qs.order_by("-created_at")[:50]
+    return Response({"count": qs.count(), "files": [_file_brief(f) for f in files]})
 
 
 @api_view(["GET"])
@@ -89,4 +224,20 @@ def portal_download(request: Request, pk: int):
     if not datafile.file_path or not Path(datafile.file_path).exists():
         return Response({"detail": "文件不存在"}, status=404)
     log("download", request=request, target=datafile.name)
+
+    # 选列下载（v0.24）：?columns=a,b；列级脱敏（v0.27）：普通用户对脱敏列遮蔽
+    cols_param = (request.query_params.get("columns") or "").strip()
+    wanted = [c for c in cols_param.split(",") if c] if cols_param else None
+    rules = _masking_for(request.user, datafile.dataset)
+
+    if wanted or rules:
+        columns, rows = excel.read_xlsx(datafile.file_path, columns=wanted)
+        if rules:
+            from apps.dataset.masking import mask_rows
+
+            rows = mask_rows(columns, rows, rules)
+        tmp = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
+        tmp.close()
+        excel.export_to_xlsx(columns, rows, tmp.name)
+        return FileResponse(open(tmp.name, "rb"), as_attachment=True, filename=datafile.name)
     return FileResponse(open(datafile.file_path, "rb"), as_attachment=True, filename=datafile.name)

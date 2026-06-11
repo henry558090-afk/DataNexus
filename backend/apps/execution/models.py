@@ -29,6 +29,7 @@ class DataFile(models.Model):
     )
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.RUNNING)
     row_count = models.IntegerField("行数", null=True, blank=True)
+    duration_ms = models.IntegerField("耗时(毫秒)", null=True, blank=True)  # v0.23 运行健康看板
     file_path = models.CharField("文件路径", max_length=500, blank=True)
     file_size = models.BigIntegerField("大小(字节)", null=True, blank=True)
     error_msg = models.TextField("错误信息", blank=True)

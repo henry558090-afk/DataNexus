@@ -118,12 +118,19 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # ---- DRF：内置账号 + Token 认证 ----
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.TokenAuthentication",
+        # 带绝对有效期的 Token 认证（SEC2），登录会轮换刷新有效期
+        "apps.accounts.authentication.ExpiringTokenAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    # 限流：仅给登录接口配作用域速率，防暴力撞库（SEC1）。
+    # 用默认本地内存缓存，多 worker 下为每进程独立；如需全局严格限流，
+    # 配共享缓存（如数据库缓存 / Redis）即可，无需改代码。
+    "DEFAULT_THROTTLE_RATES": {
+        "login": env("LOGIN_THROTTLE_RATE", default="10/min"),
+    },
 }
 
 # ---- CORS ----
@@ -136,6 +143,39 @@ QUERY_TIMEOUT_SECONDS = env("QUERY_TIMEOUT_SECONDS")
 QUERY_FETCH_SIZE = env("QUERY_FETCH_SIZE")
 # 每个数据集保留最近 N 次执行/文件，超出自动清理
 EXECUTION_KEEP = env("EXECUTION_KEEP")
+# 运行中文件超过该秒数仍未结束 → 视为进程崩溃留下的僵尸，清道夫标记为失败
+STUCK_RUNNING_SECONDS = env.int("STUCK_RUNNING_SECONDS", default=1800)
+# 登录 Token 绝对有效期（秒），默认 7 天；过期需重新登录（SEC2）。0=永不过期
+TOKEN_TTL_SECONDS = env.int("TOKEN_TTL_SECONDS", default=7 * 24 * 3600)
+# 数据集运行是否内联执行（同步）。默认 False=后台线程异步（S1）；测试置 True 便于断言
+DATASET_RUN_INLINE = env.bool("DATASET_RUN_INLINE", default=False)
+
+# ---- 订阅推送（v0.25）：邮件 + Webhook（钉钉/企业微信机器人）----
+# 邮件：默认开发用 console 后端打印；生产填 SMTP。
+EMAIL_BACKEND = env(
+    "EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend"
+)
+EMAIL_HOST = env("EMAIL_HOST", default="")
+EMAIL_PORT = env.int("EMAIL_PORT", default=25)
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=False)
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="data-nexus@localhost")
+# 平台对外访问地址，用于推送消息里拼下载链接（如 https://data.corp.com）
+PLATFORM_BASE_URL = env("PLATFORM_BASE_URL", default="")
+# Webhook 推送超时秒
+WEBHOOK_TIMEOUT_SECONDS = env.int("WEBHOOK_TIMEOUT_SECONDS", default=10)
+
+# ---- 企业微信 SSO（v0.27，可选）----
+# 填好 CORP_ID/AGENT_ID/SECRET 即启用；不填则相关接口返回未启用。
+WECOM_ENABLED = env.bool("WECOM_ENABLED", default=False)
+WECOM_CORP_ID = env("WECOM_CORP_ID", default="")
+WECOM_AGENT_ID = env("WECOM_AGENT_ID", default="")
+WECOM_SECRET = env("WECOM_SECRET", default="")
+# 扫码登录回调后，带 token 跳转到的前端地址
+WECOM_REDIRECT_FRONTEND = env("WECOM_REDIRECT_FRONTEND", default="/")
+# 首次登录是否自动创建本地用户（用企微 userid 作为用户名）
+WECOM_AUTO_PROVISION = env.bool("WECOM_AUTO_PROVISION", default=True)
 
 # ---- 安全加固 ----
 SECURE_CONTENT_TYPE_NOSNIFF = True

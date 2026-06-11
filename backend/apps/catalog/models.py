@@ -42,13 +42,36 @@ class Folder(models.Model):
         return self.name
 
     def ancestor_ids(self) -> list[int]:
-        """自身 + 所有祖先的 id（用于授权递归判定）。"""
+        """自身 + 所有祖先的 id（用于授权递归判定）。
+
+        一次查询载入全部 (id, parent_id) 后在内存里上溯，避免逐级懒加载的
+        N 次查询（v0.22 M3）。内部目录树规模小，单次全量加载远优于 N+1。
+        含环保护：parent 链出现重复 id 即停止。
+        """
+        parent_map = dict(Folder.objects.values_list("id", "parent_id"))
         ids = [self.id]
-        node = self.parent
-        while node is not None:
-            ids.append(node.id)
-            node = node.parent
+        seen = {self.id}
+        pid = parent_map.get(self.id)
+        while pid is not None and pid not in seen:
+            ids.append(pid)
+            seen.add(pid)
+            pid = parent_map.get(pid)
         return ids
+
+
+class Favorite(models.Model):
+    """用户收藏的文件夹（v0.24）。"""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="favorites"
+    )
+    folder = models.ForeignKey(Folder, on_delete=models.CASCADE, related_name="favorited_by")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [("user", "folder")]
+        verbose_name = "收藏"
+        verbose_name_plural = "收藏"
 
 
 class FolderShare(models.Model):

@@ -46,15 +46,23 @@ class SqlNotAllowed(ValueError):
 
 
 def _strip_comments(sql: str) -> str:
-    """去除块注释 /* */ 与行注释 --。"""
+    """去除块注释 ``/* */``、行注释 ``--`` 与 MySQL 的 ``#`` 行注释。"""
     sql = re.sub(r"/\*.*?\*/", " ", sql, flags=re.S)
     sql = re.sub(r"--[^\n]*", " ", sql)
+    sql = re.sub(r"#[^\n]*", " ", sql)  # MySQL 井号行注释
     return sql
 
 
 def _strip_string_literals(sql: str) -> str:
-    """把单引号字符串字面量替换为空串，避免字面量里的词触发关键字校验。"""
-    return re.sub(r"'(?:[^']|'')*'", "''", sql)
+    """把字符串字面量替换为空串，避免字面量里的词触发关键字校验。
+
+    覆盖：单引号串（含 ``''`` 转义与 ``\\'`` 反斜杠转义）、双引号串（MySQL 字符串 /
+    带引号标识符）。只用于关键字/结构探测，真正执行用的是原始 SQL，所以这里
+    多剥离一些只会更安全（更倾向误拒，符合本模块"安全优先"策略）。
+    """
+    sql = re.sub(r"'(?:[^'\\]|''|\\.)*'", "''", sql)
+    sql = re.sub(r'"(?:[^"\\]|""|\\.)*"', '""', sql)
+    return sql
 
 
 def validate_readonly_sql(sql: str) -> str:

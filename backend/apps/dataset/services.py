@@ -2,15 +2,32 @@
 
 from __future__ import annotations
 
+import time
 from datetime import timedelta
 from pathlib import Path
 
 from django.conf import settings
+from django.db import OperationalError
 from django.utils import timezone
 
 from apps.dataset.models import Dataset
 from apps.execution.models import DataFile
 from core import db, excel
+
+
+def _retry_locked(fn, *, attempts: int = 5, base_delay: float = 0.2):
+    """对 SQLite "database is locked" 做指数退避重试（S2）。
+
+    web + 调度双进程并发写元数据库时，偶发锁等待超时；重试可消化瞬时争用。
+    非锁错误或重试用尽则原样抛出。其他数据库（MySQL）不会触发此分支。
+    """
+    for i in range(attempts):
+        try:
+            return fn()
+        except OperationalError as exc:
+            if "locked" not in str(exc).lower() or i == attempts - 1:
+                raise
+            time.sleep(base_delay * (2**i))
 
 
 def _conn_params(datasource) -> db.ConnParams:
@@ -34,14 +51,20 @@ def preview_dataset(dataset: Dataset, *, limit: int = 50) -> tuple[list[str], li
 
 
 def _apply_retention(dataset: Dataset) -> None:
-    """按数据集的 keep_count / keep_days 清理旧文件（含磁盘文件）。"""
-    qs = DataFile.objects.filter(dataset=dataset).order_by("-created_at")
+    """按数据集的 keep_count / keep_days 清理旧文件（含磁盘文件）。
+
+    只对**成功**文件计数与按天清理，失败/运行中的文件不占用保留名额、
+    也不会因为几次失败把成功的好文件挤掉（见 v0.22 M1）。
+    """
+    success = DataFile.objects.filter(
+        dataset=dataset, status=DataFile.Status.SUCCESS
+    ).order_by("-created_at")
     to_delete = []
     if dataset.keep_count and dataset.keep_count > 0:
-        to_delete += list(qs[dataset.keep_count :])
+        to_delete += list(success[dataset.keep_count :])
     if dataset.keep_days and dataset.keep_days > 0:
         cutoff = timezone.now() - timedelta(days=dataset.keep_days)
-        to_delete += list(qs.filter(created_at__lt=cutoff))
+        to_delete += list(success.filter(created_at__lt=cutoff))
     for f in {x.id: x for x in to_delete}.values():
         if f.file_path:
             p = Path(f.file_path)
@@ -53,16 +76,40 @@ def _apply_retention(dataset: Dataset) -> None:
         f.delete()
 
 
-def run_dataset(dataset: Dataset, user=None) -> DataFile:
-    """运行数据集，在目标文件夹新增一个数据文件。无论成败返回 DataFile。"""
-    now = timezone.localtime()
-    datafile = DataFile.objects.create(
-        folder=dataset.target_folder,
-        name=dataset.build_filename(now),
-        dataset=dataset,
-        status=DataFile.Status.RUNNING,
-        created_by=user,
+def reap_stuck_running(timeout_seconds: int | None = None) -> int:
+    """把卡死的"运行中"文件标记为失败（进程崩溃/重启会留下僵尸 RUNNING）。
+
+    超过 ``timeout_seconds``（默认取 settings.STUCK_RUNNING_SECONDS）仍处于
+    RUNNING 的文件视为已死。返回标记数量。由调度进程周期性调用，也可在启动时调用。
+    """
+    if timeout_seconds is None:
+        timeout_seconds = getattr(settings, "STUCK_RUNNING_SECONDS", 1800)
+    cutoff = timezone.now() - timedelta(seconds=timeout_seconds)
+    stuck = DataFile.objects.filter(
+        status=DataFile.Status.RUNNING, created_at__lt=cutoff
     )
+    return stuck.update(
+        status=DataFile.Status.FAILED,
+        error_msg="运行超时或进程中断，已自动标记为失败（v0.22 清道夫）。",
+    )
+
+
+def _create_running_file(dataset: Dataset, user=None) -> DataFile:
+    """先建一条"运行中"记录，拿到 id（磁盘文件名要用）。"""
+    now = timezone.localtime()
+    return _retry_locked(
+        lambda: DataFile.objects.create(
+            folder=dataset.target_folder,
+            name=dataset.build_filename(now),
+            dataset=dataset,
+            status=DataFile.Status.RUNNING,
+            created_by=user,
+        )
+    )
+
+
+def _execute_run(dataset: Dataset, datafile: DataFile) -> None:
+    """执行体：连库跑数 → 写 Excel → 回填结果 → 保留清理。无论成败落库，不抛。"""
     try:
         columns, rows = db.stream_query(
             _conn_params(dataset.datasource),
@@ -71,7 +118,9 @@ def run_dataset(dataset: Dataset, user=None) -> DataFile:
             fetch_size=settings.QUERY_FETCH_SIZE,
             timeout_seconds=settings.QUERY_TIMEOUT_SECONDS,
         )
-        stamp = now.strftime("%Y%m%d_%H%M%S")
+        stamp = datafile.created_at.astimezone(timezone.get_current_timezone()).strftime(
+            "%Y%m%d_%H%M%S"
+        )
         out_dir = Path(settings.MEDIA_ROOT) / "exports" / str(dataset.id)
         out_path = out_dir / f"{stamp}_{datafile.id}.xlsx"  # 磁盘名唯一
         row_count = excel.export_to_xlsx(columns, rows, out_path)
@@ -80,10 +129,44 @@ def run_dataset(dataset: Dataset, user=None) -> DataFile:
         datafile.row_count = row_count
         datafile.file_path = str(out_path)
         datafile.file_size = out_path.stat().st_size
-        datafile.save()
+        _retry_locked(datafile.save)
         _apply_retention(dataset)
     except Exception as exc:  # noqa: BLE001 - 失败落库，不抛 500
         datafile.status = DataFile.Status.FAILED
         datafile.error_msg = str(exc)
-        datafile.save()
+        _retry_locked(datafile.save)
+
+
+def run_dataset(dataset: Dataset, user=None) -> DataFile:
+    """同步运行数据集（调度进程用）：建记录 → 执行 → 返回最终 DataFile。"""
+    datafile = _create_running_file(dataset, user)
+    _execute_run(dataset, datafile)
+    return datafile
+
+
+def start_dataset_run(dataset: Dataset, user=None) -> DataFile:
+    """异步运行（Web 接口用，S1）：立刻返回"运行中"记录，后台线程执行实际跑数。
+
+    避免长查询/写 Excel 阻塞 gunicorn worker 导致整站卡死。前端按 DataFile.status
+    轮询结果。线程内独立持有 DB 连接，结束时关闭，防止连接泄漏。
+    """
+    import threading
+
+    from django.db import connections
+
+    datafile = _create_running_file(dataset, user)
+
+    # 测试或显式配置下内联执行，便于断言、避免线程跨事务可见性问题
+    if getattr(settings, "DATASET_RUN_INLINE", False):
+        _execute_run(dataset, datafile)
+        datafile.refresh_from_db()
+        return datafile
+
+    def _worker():
+        try:
+            _execute_run(dataset, datafile)
+        finally:
+            connections.close_all()  # 关闭本线程的 DB 连接
+
+    threading.Thread(target=_worker, daemon=True, name=f"dsrun-{datafile.id}").start()
     return datafile

@@ -11,7 +11,7 @@ from rest_framework.response import Response
 from rest_framework.routers import DefaultRouter
 
 from apps.accounts.permissions import IsManager
-from apps.accounts.views import LoginView, UserViewSet
+from apps.accounts.views import LoginView, LogoutView, UserViewSet
 from apps.audit.views import AuditLogViewSet
 from apps.catalog import portal
 from apps.catalog.views import DepartmentViewSet, FolderShareViewSet, FolderViewSet
@@ -34,7 +34,7 @@ router.register("audit-logs", AuditLogViewSet, basename="audit-log")
 
 def health(_request: HttpRequest) -> JsonResponse:
     """健康检查，便于确认服务可用。"""
-    return JsonResponse({"status": "ok", "service": "data-nexus", "version": "v0.19"})
+    return JsonResponse({"status": "ok", "service": "data-nexus", "version": "v0.22"})
 
 
 def spa(_request: HttpRequest):
@@ -87,6 +87,7 @@ urlpatterns = [
     path("django-admin/", admin.site.urls),  # 挪开，给前端 /admin/* 让路
     path("api/health/", health, name="health"),
     path("api/auth/token/", LoginView.as_view(), name="auth-token"),  # 账号密码换 Token + 审计
+    path("api/auth/logout/", LogoutView.as_view(), name="auth-logout"),  # 登出删 Token
     path("api/auth/me/", me, name="auth-me"),
     path("api/stats/", stats, name="stats"),
     path("api/", include(router.urls)),  # /api/datasources/ ...

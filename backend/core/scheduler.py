@@ -44,8 +44,14 @@ _signatures: dict[str, str] = {}
 
 
 def reconcile(scheduler) -> None:
-    """把调度器任务与活跃数据集的定时配置对齐（增/删/改）。"""
+    """把调度器任务与活跃数据集的定时配置对齐（增/删/改）。
+
+    顺带清理卡死的"运行中"僵尸文件（进程崩溃/重启会留下，见 v0.22 M2）。
+    """
     from apps.dataset.models import Dataset
+    from apps.dataset.services import reap_stuck_running
+
+    reap_stuck_running()
 
     desired: dict[str, tuple] = {}
     for ds in Dataset.objects.filter(is_active=True):

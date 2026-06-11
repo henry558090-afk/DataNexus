@@ -12,6 +12,19 @@ from openpyxl import Workbook
 from openpyxl.cell import WriteOnlyCell
 from openpyxl.styles import Font
 
+# 以这些字符开头的文本，Excel/WPS 打开时会被当公式执行（CSV/Excel 注入）。
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _sanitize(value: object) -> object:
+    """对疑似公式的字符串单元格加前导单引号，使其被当作纯文本（防注入）。
+
+    只处理字符串；数字/日期/None 等原样返回，不影响数据类型与展示。
+    """
+    if isinstance(value, str) and value and value[0] in _FORMULA_PREFIXES:
+        return "'" + value
+    return value
+
 
 def export_to_xlsx(
     columns: Sequence[str],
@@ -43,7 +56,7 @@ def export_to_xlsx(
 
     row_count = 0
     for row in rows:
-        worksheet.append(list(row))
+        worksheet.append([_sanitize(v) for v in row])
         row_count += 1
 
     workbook.save(str(output_path))

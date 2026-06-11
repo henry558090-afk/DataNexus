@@ -28,9 +28,10 @@ class DatasetViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def run(self, request: Request, pk: str | None = None) -> Response:
+        """触发运行：异步执行（S1），立即返回"运行中"的 DataFile，前端按 status 轮询。"""
         from apps.audit.services import log
 
         dataset = self.get_object()
-        datafile = services.run_dataset(dataset, user=request.user)
+        datafile = services.start_dataset_run(dataset, user=request.user)
         log("run", request=request, target=dataset.name)
         return Response(DataFileSerializer(datafile).data)

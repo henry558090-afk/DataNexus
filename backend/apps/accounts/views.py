@@ -1,9 +1,12 @@
 from django.contrib.auth import get_user_model
-from rest_framework import viewsets
+from rest_framework import status, viewsets
 from rest_framework.authtoken.models import Token
 from rest_framework.authtoken.views import ObtainAuthToken
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
+from rest_framework.views import APIView
 
 from apps.accounts.permissions import IsManager
 from apps.accounts.serializers import UserSerializer
@@ -13,16 +16,31 @@ User = get_user_model()
 
 
 class LoginView(ObtainAuthToken):
-    """账号密码换 Token，并记录登录审计。"""
+    """账号密码换 Token：限流防爆破（SEC1）+ 每次登录轮换刷新 Token 有效期（SEC2）。"""
+
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "login"
 
     def post(self, request: Request, *args, **kwargs) -> Response:
         serializer = self.serializer_class(data=request.data, context={"request": request})
         if not serializer.is_valid():
             return Response(serializer.errors, status=400)
         user = serializer.validated_data["user"]
-        token, _ = Token.objects.get_or_create(user=user)
+        # 轮换：删旧建新，刷新有效期；旧设备上的 token 随即失效（单活动会话）
+        Token.objects.filter(user=user).delete()
+        token = Token.objects.create(user=user)
         log("login", user=user, request=request, target=user.username)
         return Response({"token": token.key})
+
+
+class LogoutView(APIView):
+    """登出：删除服务端 Token，使其立即失效（SEC2）。"""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        Token.objects.filter(user=request.user).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class UserViewSet(viewsets.ModelViewSet):

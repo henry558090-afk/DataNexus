@@ -37,7 +37,13 @@ export const useAuthStore = defineStore('auth', () => {
     return data
   }
 
-  function logout(): void {
+  async function logout(): Promise<void> {
+    // 先让服务端 Token 失效（SEC2），失败也继续清本地，保证一定能登出
+    try {
+      await http.post('/auth/logout/')
+    } catch {
+      /* 忽略：网络/已过期都不影响本地登出 */
+    }
     token.value = ''
     profile.value = null
     localStorage.removeItem('token')

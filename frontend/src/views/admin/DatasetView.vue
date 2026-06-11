@@ -9,6 +9,7 @@ import {
   type PreviewResult,
   createDataset,
   deleteDataset,
+  getDataFile,
   listDatasets,
   previewDataset,
   runDataset,
@@ -155,9 +156,18 @@ async function handleSave() {
 async function handleRun(row: Dataset) {
   runningId.value = row.id
   try {
+    // 异步运行：先拿到"运行中"的文件，再轮询其状态直到成功/失败（S1）
     const { data } = await runDataset(row.id)
-    if (data.status === 'success') ElMessage.success(`运行成功，共 ${data.row_count} 行`)
-    else ElMessage.error(`运行失败：${data.error_msg}`)
+    let result = data
+    const startedAt = Date.now()
+    // 最长轮询 10 分钟，每 1.5s 查一次
+    while (result.status === 'running' && Date.now() - startedAt < 10 * 60 * 1000) {
+      await new Promise((r) => setTimeout(r, 1500))
+      result = (await getDataFile(data.id)).data
+    }
+    if (result.status === 'success') ElMessage.success(`运行成功，共 ${result.row_count} 行`)
+    else if (result.status === 'failed') ElMessage.error(`运行失败：${result.error_msg}`)
+    else ElMessage.warning('运行仍在进行中，可稍后在文件列表查看结果')
     await load()
   } finally {
     runningId.value = null

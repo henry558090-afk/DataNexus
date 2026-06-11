@@ -118,12 +118,19 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # ---- DRF：内置账号 + Token 认证 ----
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.TokenAuthentication",
+        # 带绝对有效期的 Token 认证（SEC2），登录会轮换刷新有效期
+        "apps.accounts.authentication.ExpiringTokenAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    # 限流：仅给登录接口配作用域速率，防暴力撞库（SEC1）。
+    # 用默认本地内存缓存，多 worker 下为每进程独立；如需全局严格限流，
+    # 配共享缓存（如数据库缓存 / Redis）即可，无需改代码。
+    "DEFAULT_THROTTLE_RATES": {
+        "login": env("LOGIN_THROTTLE_RATE", default="10/min"),
+    },
 }
 
 # ---- CORS ----
@@ -136,6 +143,12 @@ QUERY_TIMEOUT_SECONDS = env("QUERY_TIMEOUT_SECONDS")
 QUERY_FETCH_SIZE = env("QUERY_FETCH_SIZE")
 # 每个数据集保留最近 N 次执行/文件，超出自动清理
 EXECUTION_KEEP = env("EXECUTION_KEEP")
+# 运行中文件超过该秒数仍未结束 → 视为进程崩溃留下的僵尸，清道夫标记为失败
+STUCK_RUNNING_SECONDS = env.int("STUCK_RUNNING_SECONDS", default=1800)
+# 登录 Token 绝对有效期（秒），默认 7 天；过期需重新登录（SEC2）。0=永不过期
+TOKEN_TTL_SECONDS = env.int("TOKEN_TTL_SECONDS", default=7 * 24 * 3600)
+# 数据集运行是否内联执行（同步）。默认 False=后台线程异步（S1）；测试置 True 便于断言
+DATASET_RUN_INLINE = env.bool("DATASET_RUN_INLINE", default=False)
 
 # ---- 安全加固 ----
 SECURE_CONTENT_TYPE_NOSNIFF = True

@@ -72,3 +72,7 @@ export function previewDataset(id: number) {
 export function runDataset(id: number) {
   return http.post<RunResult>(`/datasets/${id}/run/`)
 }
+// 轮询单个数据文件的运行状态（异步运行后用，S1）
+export function getDataFile(id: number) {
+  return http.get<RunResult>(`/datafiles/${id}/`)
+}

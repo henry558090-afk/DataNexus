@@ -7,7 +7,7 @@ def _set_sqlite_pragmas(sender, connection, **kwargs):
         cursor = connection.cursor()
         cursor.execute("PRAGMA journal_mode=WAL;")
         cursor.execute("PRAGMA synchronous=NORMAL;")
-        cursor.execute("PRAGMA busy_timeout=10000;")
+        cursor.execute("PRAGMA busy_timeout=20000;")  # 与 settings OPTIONS.timeout 一致
 
 
 class AccountsConfig(AppConfig):

@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
+import http from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
 
 const routes: RouteRecordRaw[] = [
@@ -101,11 +102,17 @@ const router = createRouter({
 
 // 守卫：登录校验 + 角色分流
 router.beforeEach(async (to) => {
-  // 企业微信 SSO 回调：URL 带 ?token=xxx → 存下并清理地址栏
-  if (typeof to.query.token === 'string' && to.query.token) {
-    localStorage.setItem('token', to.query.token)
+  // 企业微信 SSO 回调：URL 带一次性短码 ?wecom_code=xxx → POST 换 token（B5，token 不进 URL）
+  if (typeof to.query.wecom_code === 'string' && to.query.wecom_code) {
+    const code = to.query.wecom_code
     const rest = { ...to.query }
-    delete rest.token
+    delete rest.wecom_code
+    try {
+      const { data } = await http.post<{ token: string }>('/auth/wecom/exchange/', { code })
+      localStorage.setItem('token', data.token)
+    } catch {
+      return { name: 'login', query: rest }
+    }
     return { path: to.path, query: rest, replace: true }
   }
   const token = localStorage.getItem('token')

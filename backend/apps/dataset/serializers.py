@@ -58,6 +58,33 @@ class DatasetSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(str(exc)) from exc
         return value
 
+    def validate(self, attrs: dict) -> dict:
+        """校验 SQL 里用到的绑定占位符都已在参数定义里声明（B4）。
+
+        否则运行时才报"绑定缺失"，难排查。占位符识别：Oracle ``:name`` / MySQL ``%(name)s``，
+        在去注释、去字符串字面量后再扫，避免误判字符串里的内容。
+        """
+        import re
+
+        from core.sql_guard import _strip_comments, _strip_string_literals
+
+        sql = attrs.get("sql_text", getattr(self.instance, "sql_text", "") or "")
+        params = attrs.get("params", getattr(self.instance, "params", []) or [])
+        defined = {p.get("name") for p in params if isinstance(p, dict) and p.get("name")}
+        probe = _strip_string_literals(_strip_comments(sql))
+        used = set(re.findall(r":([A-Za-z_]\w*)", probe)) | set(
+            re.findall(r"%\((\w+)\)s", probe)
+        )
+        missing = used - defined
+        if missing:
+            raise serializers.ValidationError(
+                {
+                    "params": "SQL 用到的参数未在参数定义里声明："
+                    + "、".join(sorted(missing))
+                }
+            )
+        return attrs
+
     def get_last_run(self, obj: Dataset) -> dict | None:
         f = obj.files.order_by("-created_at").first()
         if f is None:

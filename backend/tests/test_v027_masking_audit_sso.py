@@ -129,5 +129,6 @@ def test_wecom_callback_maps_user_and_issues_token(db, settings, monkeypatch):
     monkeypatch.setattr(wecom, "exchange_code_for_userid", lambda code: "zhangsan")
     r = APIClient().get("/api/auth/wecom/callback/?code=abc")
     assert r.status_code == 302
-    assert "token=" in r["Location"]
+    # B5：回调用一次性短码跳转，token 不进 URL
+    assert "wecom_code=" in r["Location"] and "token=" not in r["Location"]
     assert User.objects.filter(username="zhangsan").exists()

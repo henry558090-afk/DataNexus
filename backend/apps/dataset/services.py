@@ -176,14 +176,29 @@ def run_dataset(dataset: Dataset, user=None, params: dict | None = None) -> Data
     return datafile
 
 
-def start_dataset_run(dataset: Dataset, user=None, params: dict | None = None) -> DataFile:
-    """异步运行（Web 接口用，S1）：立刻返回"运行中"记录，后台线程执行实际跑数。
+_run_pool = None
 
-    避免长查询/写 Excel 阻塞 gunicorn worker 导致整站卡死。前端按 DataFile.status
-    轮询结果。线程内独立持有 DB 连接，结束时关闭，防止连接泄漏。
+
+def _run_executor():
+    """有界线程池（B2 修复）：限制并发运行数，避免批量运行打满线程/业务库连接。
+
+    超出并发上限的运行会排队，而不是无限起线程。容量由 DATASET_RUN_CONCURRENCY 控制。
     """
-    import threading
+    global _run_pool
+    if _run_pool is None:
+        from concurrent.futures import ThreadPoolExecutor
 
+        workers = getattr(settings, "DATASET_RUN_CONCURRENCY", 4)
+        _run_pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="dsrun")
+    return _run_pool
+
+
+def start_dataset_run(dataset: Dataset, user=None, params: dict | None = None) -> DataFile:
+    """异步运行（Web 接口用，S1）：立刻返回"运行中"记录，后台线程池执行实际跑数。
+
+    避免长查询/写 Excel 阻塞 gunicorn worker。前端按 DataFile.status 轮询结果。
+    用**有界线程池**（B2）防止批量运行起爆线程；线程内独立持有 DB 连接，结束时关闭。
+    """
     from django.db import connections
 
     datafile = _create_running_file(dataset, user)
@@ -200,5 +215,5 @@ def start_dataset_run(dataset: Dataset, user=None, params: dict | None = None) -
         finally:
             connections.close_all()  # 关闭本线程的 DB 连接
 
-    threading.Thread(target=_worker, daemon=True, name=f"dsrun-{datafile.id}").start()
+    _run_executor().submit(_worker)
     return datafile

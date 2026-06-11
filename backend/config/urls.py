@@ -16,6 +16,7 @@ from apps.accounts.views import (
     LogoutView,
     UserViewSet,
     WecomCallbackView,
+    WecomExchangeView,
     WecomLoginView,
 )
 from apps.audit.views import AuditLogViewSet
@@ -99,6 +100,7 @@ urlpatterns = [
     path("api/auth/logout/", LogoutView.as_view(), name="auth-logout"),  # 登出删 Token
     path("api/auth/wecom/login/", WecomLoginView.as_view(), name="wecom-login"),  # 企微 SSO
     path("api/auth/wecom/callback/", WecomCallbackView.as_view(), name="wecom-callback"),
+    path("api/auth/wecom/exchange/", WecomExchangeView.as_view(), name="wecom-exchange"),
     path("api/auth/me/", me, name="auth-me"),
     path("api/stats/", stats, name="stats"),
     path("api/", include(router.urls)),  # /api/datasources/ ...

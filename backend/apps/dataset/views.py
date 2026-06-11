@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.conf import settings
 from django.db.models import Avg, Count, Q
 from django.utils import timezone
 from rest_framework import viewsets
@@ -74,22 +75,27 @@ class DatasetViewSet(viewsets.ModelViewSet):
         )
         if not f or not f.file_path:
             return Response({"detail": "暂无可用数据文件"}, status=404)
+        # 限制读取行数，避免大文件把整份读进 Web 进程内存（B3 修复）
+        cap = getattr(settings, "CHART_MAX_ROWS", 50000)
         cols = [x] + ([y] if y else [])
-        columns, rows = excel.read_xlsx(f.file_path, columns=cols)
+        columns, rows = excel.read_xlsx(f.file_path, columns=cols, limit=cap)
         if x not in columns:
             return Response({"detail": f"列 {x} 不存在"}, status=400)
         xi = columns.index(x)
         yi = columns.index(y) if y and y in columns else None
+        skipped = 0  # 无法解析为数值的行数（B6：不再静默当 0）
         buckets: dict = {}
         for row in rows:
             key = row[xi]
             if agg == "count":
                 buckets[key] = buckets.get(key, 0) + 1
             elif yi is not None:
+                raw = row[yi]
                 try:
-                    val = float(row[yi]) if row[yi] is not None else 0
+                    val = float(raw) if raw not in (None, "") else 0.0
                 except (TypeError, ValueError):
-                    val = 0
+                    skipped += 1
+                    continue
                 cur = buckets.get(key, [0, 0])
                 buckets[key] = [cur[0] + val, cur[1] + 1]
         labels = list(buckets.keys())
@@ -101,7 +107,15 @@ class DatasetViewSet(viewsets.ModelViewSet):
             ]
         else:  # sum
             values = [buckets[k][0] for k in labels]
-        return Response({"labels": [str(label) for label in labels], "values": values, "agg": agg})
+        return Response(
+            {
+                "labels": [str(label) for label in labels],
+                "values": values,
+                "agg": agg,
+                "skipped": skipped,  # 有多少行 Y 值无法解析为数值
+                "truncated": len(rows) >= cap,  # 是否因行数上限被截断
+            }
+        )
 
     @action(detail=False, methods=["post"], url_path="batch-run")
     def batch_run(self, request: Request) -> Response:

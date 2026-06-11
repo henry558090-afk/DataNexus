@@ -3,7 +3,6 @@
 可见性统一走 apps.permission.services（默认拒绝）。
 """
 
-import tempfile
 from pathlib import Path
 
 from django.http import FileResponse
@@ -255,19 +254,15 @@ def portal_download(request: Request, pk: int):
         return Response({"detail": "文件不存在"}, status=404)
     log("download", request=request, target=datafile.name)
 
-    # 选列下载（v0.24）：?columns=a,b；列级脱敏（v0.27）：普通用户对脱敏列遮蔽
+    # 选列下载（v0.24）：?columns=a,b；列级脱敏（v0.27）：普通用户对脱敏列遮蔽。
+    # 二者任一生效时，流式生成到内存（不落临时文件，恒定内存 —— 修复 B1/B3）。
     cols_param = (request.query_params.get("columns") or "").strip()
     wanted = [c for c in cols_param.split(",") if c] if cols_param else None
     rules = _masking_for(request.user, datafile.dataset)
 
     if wanted or rules:
-        columns, rows = excel.read_xlsx(datafile.file_path, columns=wanted)
-        if rules:
-            from apps.dataset.masking import mask_rows
+        from apps.dataset.masking import stream_filtered_xlsx
 
-            rows = mask_rows(columns, rows, rules)
-        tmp = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
-        tmp.close()
-        excel.export_to_xlsx(columns, rows, tmp.name)
-        return FileResponse(open(tmp.name, "rb"), as_attachment=True, filename=datafile.name)
+        buf = stream_filtered_xlsx(datafile.file_path, columns=wanted, rules=rules)
+        return FileResponse(buf, as_attachment=True, filename=datafile.name)
     return FileResponse(open(datafile.file_path, "rb"), as_attachment=True, filename=datafile.name)

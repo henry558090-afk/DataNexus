@@ -92,9 +92,43 @@ class WecomCallbackView(APIView):
         Token.objects.filter(user=user).delete()
         token = Token.objects.create(user=user)
         log("login", user=user, request=request, target=f"{user.username}(企微)")
+        # 不把 token 放 URL（会进日志/历史）：下发一次性短码，前端 POST 换 token（B5）
+        import secrets
+
+        from apps.accounts.models import WecomLoginCode
+
+        code = secrets.token_urlsafe(24)
+        WecomLoginCode.objects.create(code=code, token_key=token.key)
         front = getattr(settings, "WECOM_REDIRECT_FRONTEND", "/")
         sep = "&" if "?" in front else "?"
-        return redirect(f"{front}{sep}token={token.key}")
+        return redirect(f"{front}{sep}wecom_code={code}")
+
+
+class WecomExchangeView(APIView):
+    """用一次性短码换 Token（B5）：码有效期 120s，用完即删。"""
+
+    authentication_classes: list = []
+    permission_classes: list = []
+
+    def post(self, request: Request) -> Response:
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from apps.accounts.models import WecomLoginCode
+
+        code = request.data.get("code")
+        if not code:
+            return Response({"detail": "缺少 code"}, status=400)
+        rec = WecomLoginCode.objects.filter(code=code).first()
+        if rec is None:
+            return Response({"detail": "无效或已使用的登录码"}, status=400)
+        expired = rec.created_at < timezone.now() - timedelta(seconds=120)
+        token_key = rec.token_key
+        rec.delete()  # 一次性：无论是否过期都删
+        if expired:
+            return Response({"detail": "登录码已过期，请重新登录"}, status=400)
+        return Response({"token": token_key})
 
 
 class UserViewSet(viewsets.ModelViewSet):

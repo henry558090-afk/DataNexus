@@ -44,3 +44,48 @@ def rules_for(dataset) -> dict[str, str]:
         r.column: r.strategy
         for r in MaskingRule.objects.filter(dataset=dataset)
     }
+
+
+def stream_filtered_xlsx(src_path, *, columns=None, rules=None):
+    """流式读源 xlsx →（可选选列 + 脱敏）→ 写入内存 BytesIO（B1/B3 修复）。
+
+    用 openpyxl read_only + write_only 逐行处理，**不落临时文件、内存占用恒定**。
+    返回可直接交给 FileResponse 的 BytesIO。
+    """
+    from io import BytesIO
+
+    from openpyxl import Workbook, load_workbook
+
+    rules = rules or {}
+    wb_in = load_workbook(str(src_path), read_only=True, data_only=True)
+    try:
+        ws_in = wb_in.active
+        rows_iter = ws_in.iter_rows(values_only=True)
+        try:
+            raw_header = list(next(rows_iter))
+        except StopIteration:
+            raw_header = []
+        header = ["" if h is None else str(h) for h in raw_header]
+        idx = [header.index(c) for c in columns if c in header] if columns else list(
+            range(len(header))
+        )
+        out_header = [header[i] for i in idx]
+        mask_pos = {
+            pos: rules[col] for pos, col in enumerate(out_header) if col in rules
+        }
+
+        wb_out = Workbook(write_only=True)
+        ws_out = wb_out.create_sheet(title="数据")
+        ws_out.append(out_header)
+        for row in rows_iter:
+            vals = [row[i] if i < len(row) else None for i in idx]
+            for pos, strategy in mask_pos.items():
+                vals[pos] = _mask_value(vals[pos], strategy)
+            ws_out.append(vals)
+
+        buf = BytesIO()
+        wb_out.save(buf)
+        buf.seek(0)
+        return buf
+    finally:
+        wb_in.close()

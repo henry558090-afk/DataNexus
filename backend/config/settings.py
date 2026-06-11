@@ -149,6 +149,10 @@ STUCK_RUNNING_SECONDS = env.int("STUCK_RUNNING_SECONDS", default=1800)
 TOKEN_TTL_SECONDS = env.int("TOKEN_TTL_SECONDS", default=7 * 24 * 3600)
 # 数据集运行是否内联执行（同步）。默认 False=后台线程异步（S1）；测试置 True 便于断言
 DATASET_RUN_INLINE = env.bool("DATASET_RUN_INLINE", default=False)
+# 异步运行的并发上限（有界线程池，B2）：超出排队，防批量运行打满线程/业务库连接
+DATASET_RUN_CONCURRENCY = env.int("DATASET_RUN_CONCURRENCY", default=4)
+# 图表数据最多读取的行数（B3）：避免大文件把整份读进 Web 进程内存
+CHART_MAX_ROWS = env.int("CHART_MAX_ROWS", default=50000)
 
 # ---- 订阅推送（v0.25）：邮件 + Webhook（钉钉/企业微信机器人）----
 # 邮件：默认开发用 console 后端打印；生产填 SMTP。
